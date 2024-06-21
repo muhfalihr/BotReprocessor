@@ -37,17 +37,22 @@ class OPTelebot:
 
         @self.telebot.message_handler(commands=["start"])
         async def start(message):
+            fullname = f"{message.from_user.first_name} {message.from_user.last_name}" if message.from_user.last_name else message.from_user.first_name
             await self.telebot.send_message(
-                chat_id=message.chat.id, text="🟠 <b>Submit a list of IDs!</b>",
-                parse_mode="HTML"
+                chat_id=message.chat.id, text=(
+                    f"🧑‍💻 Req from user <i><b><a href='https://t.me/{message.from_user.username}' >SRE-{fullname}</a></b></i>\n\n"
+                    "🟠 <b>Submit a list of IDs!</b>"
+                ), parse_mode="HTML"
             )
             self.logger.info(f"Received /start command from {message.chat.id}")
         
         @self.telebot.message_handler(commands=["send"])
         async def send(message):
+            fullname = f"{message.from_user.first_name} {message.from_user.last_name}" if message.from_user.last_name else message.from_user.first_name
             self.logger.info("Sending data to the kafka topic")
             msg = await self.telebot.send_message(
                 chat_id=message.chat.id, text=(
+                    f"🧑‍💻 Req from user <i><b><a href='https://t.me/{message.from_user.username}' >SRE-{fullname}</a></b></i>\n\n"
                     "<b>🔀 Data is being sent ...</b>\n"
                     f"↳ <b>To <i>Topic {self.config['TOPICS'].get(self.local_conf['processing_path'])}</i></b>"
                 ), parse_mode="HTML"
@@ -60,6 +65,7 @@ class OPTelebot:
 
             await self.telebot.edit_message_text(
                 chat_id=message.chat.id, message_id=msg.message_id, text=(
+                    f"🧑‍💻 Req from user <i><b><a href='https://t.me/{message.from_user.username}' >SRE-{fullname}</a></b></i>\n\n"
                     f"🟢 <b>Data Successfully Sent! {time_exec}s</b>\n"
                     f"↳ <b>To <i>Topic {self.config['TOPICS'].get(self.local_conf['processing_path'])}</i></b>"
                 ), parse_mode="HTML"
@@ -85,7 +91,7 @@ class OPTelebot:
 
             markup.add(regular, reprocess)
 
-            await self.telebot.send_message(chat_id=message.chat.id, text="📥 Saving ListId into a file 📁")
+            await self.telebot.reply_to(message=message, text="📥 Saving ListId into a file 📁")
             await self.telebot.send_document(chat_id=message.chat.id, document=doc)
             await self.telebot.send_message(
                 chat_id=message.chat.id, text="📝 Specify a processing path <b>( <i>Regular</i> OR <i>Reprocess</i> )</b>", 
@@ -95,7 +101,10 @@ class OPTelebot:
         @self.telebot.callback_query_handler(func=lambda call: True)
         async def processing_path(call):
             self.local_conf.update({"processing_path": call.data})
-            await self.telebot.send_message(chat_id=call.message.chat.id, text=f"📌 <b>TOPIC <i>{self.config['TOPICS'].get(call.data)}</i></b>", parse_mode="HTML")
+            await self.telebot.send_message(chat_id=call.message.chat.id, text=(
+                f"📌 <b>TOPIC <i>{self.config['TOPICS'].get(call.data)}</i></b>"
+                ), parse_mode="HTML"
+            )
 
             resp = self.query.search(ids=self.local_conf["listId"])
             self.local_conf.update({"query_result": resp})
