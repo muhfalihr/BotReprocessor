@@ -1,14 +1,35 @@
 import json
 
-from kafka import KafkaProducer
+from kafka import KafkaProducer, errors as kafka_errors
 
 class KafkaProducerClient:
+    '''
+    A class used to produce messages to a Kafka topic.
+
+    Attributes
+    ----------
+    bootstrap_servers : str
+        A list of Kafka bootstrap server addresses.
+    topic : str
+        The Kafka topic to which messages will be sent.
+    producer : KafkaProducer
+        An instance of the KafkaProducer client configured with the provided settings.
+
+    Methods
+    -------
+    send_message(message: dict) -> None
+        Sends a message to the configured Kafka topic.
+    close() -> None
+        Closes the KafkaProducer instance.
+    '''
     def __init__(self, **config) -> None:
         """
-        Inisialisasi KafkaProducerClient dengan konfigurasi yang diberikan.
-        
-        :param bootstrap_servers: Daftar alamat server bootstrap Kafka.
-        :param topic: Topik Kafka tempat pesan akan diproduksi.
+        Initializes the KafkaProducerClient with the provided configuration.
+
+        Parameters
+        ----------
+        config : dict
+            Configuration dictionary containing the bootstrap servers and topic.
         """
         self.bootstrap_servers = config.get("bootstrap_servers")
         self.topic = config.get("topic")
@@ -25,17 +46,29 @@ class KafkaProducerClient:
 
     def send_message(self, message):
         """
-        Mengirim pesan ke topik Kafka yang dikonfigurasi.
+        Sends a message to the configured Kafka topic.
+
+        Parameters
+        ----------
+        message : dict
+            The message to be sent to the Kafka topic.
         
-        :param message: Pesan yang akan dikirim (format dict).
+        Raises
+        ------
+        kafka_errors.KafkaError
+            If there is an error sending the message to Kafka.
+        Exception
+            If there is a general error.
         """
         try:
             self.producer.send(topic=self.topic, value=message)
+        except kafka_errors.KafkaError as err:
+            raise kafka_errors.KafkaError(f"{err}")
         except Exception as err:
-            raise err
+            raise Exception(f"{err}")
     
     def close(self):
         """
-        Menutup KafkaProducer.
+        Closes the KafkaProducer instance.
         """
         self.producer.close()

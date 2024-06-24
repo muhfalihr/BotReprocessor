@@ -1,10 +1,14 @@
 class Config:
+    # Log
+    LOG_PATH = "/tmp/onp"
+    NUM_BYTES = 1000
+
     # Elasticsearch
     ES_URL = "http://10.12.3.200:5200/"
     ES_HOST = "10.12.3.200"
 
     # Kafka
-    BOOTSTRAP_SERVER = ["10.1.62.33:9092"]
+    BOOTSTRAP_SERVER = ["10.0.0.12:9092"]
     TOPICS = {
         "regular": "online-news",
         "reprocess": "online-news-reprocess"
