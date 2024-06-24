@@ -40,7 +40,7 @@ class OPTelebot:
             fullname = f"{message.from_user.first_name} {message.from_user.last_name}" if message.from_user.last_name else message.from_user.first_name
             await self.telebot.send_message(
                 chat_id=message.chat.id, text=(
-                    f"🧑‍💻 Req from user <i><b><a href='https://t.me/{message.from_user.username}' >SRE-{fullname}</a></b></i>\n\n"
+                    f"👤 Req from user <i><b><a href='https://t.me/{message.from_user.username}' >SRE-{fullname}</a></b></i>\n\n"
                     "🟠 <b>Submit a list of IDs!</b>"
                 ), parse_mode="HTML"
             )
@@ -52,7 +52,7 @@ class OPTelebot:
             self.logger.info("Sending data to the kafka topic")
             msg = await self.telebot.send_message(
                 chat_id=message.chat.id, text=(
-                    f"🧑‍💻 Req from user <i><b><a href='https://t.me/{message.from_user.username}' >SRE-{fullname}</a></b></i>\n\n"
+                    f"👤 Req from user <i><b><a href='https://t.me/{message.from_user.username}' >SRE-{fullname}</a></b></i>\n\n"
                     "<b>🔀 Data is being sent ...</b>\n"
                     f"↳ <b>To <i>Topic {self.config['TOPICS'].get(self.local_conf['processing_path'])}</i></b>"
                 ), parse_mode="HTML"
@@ -65,7 +65,7 @@ class OPTelebot:
 
             await self.telebot.edit_message_text(
                 chat_id=message.chat.id, message_id=msg.message_id, text=(
-                    f"🧑‍💻 Req from user <i><b><a href='https://t.me/{message.from_user.username}' >SRE-{fullname}</a></b></i>\n\n"
+                    f"👤 Req from user <i><b><a href='https://t.me/{message.from_user.username}' >SRE-{fullname}</a></b></i>\n\n"
                     f"🟢 <b>Data Successfully Sent! {time_exec}s</b>\n"
                     f"↳ <b>To <i>Topic {self.config['TOPICS'].get(self.local_conf['processing_path'])}</i></b>"
                 ), parse_mode="HTML"
@@ -91,7 +91,14 @@ class OPTelebot:
 
             markup.add(regular, reprocess)
 
-            await self.telebot.reply_to(message=message, text="📥 Saving ListId into a file 📁")
+            fullname = f"{message.from_user.first_name} {message.from_user.last_name}" if message.from_user.last_name else message.from_user.first_name
+
+            await self.telebot.reply_to(
+                    message=message, text=(
+                       f"👤 Req from user <i><b><a href='https://t.me/{message.from_user.username}' >SRE-{fullname}</a></b></i>\n\n"
+                        "📥 Saving ListId into a file 📁"
+                    ), parse_mode="HTML"
+            )
             await self.telebot.send_document(chat_id=message.chat.id, document=doc)
             await self.telebot.send_message(
                 chat_id=message.chat.id, text="📝 Specify a processing path <b>( <i>Regular</i> OR <i>Reprocess</i> )</b>", 
