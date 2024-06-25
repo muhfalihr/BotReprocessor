@@ -116,6 +116,7 @@ class OPTelebot:
             await self.telebot.send_message(
                 chat_id=message.chat.id, text=(
                     f"👤 Req from user [SRE-{fullname}](https://t.me/{message.from_user.username})\n\n"
+                    "See [Full Log](http://192.168.20.136:9898/log) details.\n\n"
                     f"```\n{view_last_log}```"
                 ), parse_mode="Markdown"
             )
@@ -241,6 +242,7 @@ class OPTelebot:
         send = self.send(processing_path=self.local_conf['processing_path'])
         for qr in self.local_conf['query_result']:
             send.send_message(message=qr)
+            self.logger.info(qr.__str__())
         send.close()
 
     async def start_polling(self):
