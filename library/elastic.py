@@ -1,3 +1,5 @@
+import re
+
 from typing import List
 from elasticsearch import Elasticsearch, ElasticsearchException
 
@@ -25,9 +27,9 @@ class Query:
         **kwargs : dict
             A dictionary of parameters to configure the Elasticsearch client.
         '''
-        self.es = Elasticsearch(**kwargs, headers={"Content-Type": "application/json"})
+        self.es = Elasticsearch(**kwargs, headers={"Content-Type": "application/json"}, timeout=120)
     
-    def search(self, ids: List[str]):
+    def search(self, ids: List[str], index_pattern: str):
         '''
         Queries the Elasticsearch index for documents matching the provided list of IDs.
 
@@ -49,10 +51,12 @@ class Query:
         sources = []
         for id in ids:
             full_resp = self.es.search(
-                index="ipd-news-online*",
+                index=index_pattern,
                 body={
                     "query": {
                         "match": {
+                            "id": id
+                        } if re.match(pattern=r'ipd.*', string=index_pattern) else {
                             "_id": id
                         }
                     }
@@ -64,8 +68,13 @@ class Query:
                 msg = {"query": {"match": {"_id": id}}, "response": full_resp}
                 raise ElasticsearchException(f"No results found for query: {msg}")
             
-            for hit in hits:
-                source = hit.get("_source")
-                sources.append(source)
+            if re.match(pattern=r'ipd.*', string=index_pattern):
+                for hit in hits:
+                    source = hit.get("_source")
+                    sources.append(source)
+            if re.match(pattern=r'logging-result.*', string=index_pattern):
+                for hit in hits:
+                    source = hit.get("_source").get("raw")
+                    sources.append(source)
 
         return sources

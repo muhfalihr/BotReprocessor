@@ -29,8 +29,6 @@ class OPTelebot:
         self.telebot = async_telebot.AsyncTeleBot(
             token=self.config["TELEGRAM_TOKEN"]
         )
-        # mendefinisikan class Query elasticserch
-        self.query = Query(hosts=self.config["ES_URL"])
 
         # mendefinisikan class KafkaProducerClient
         self.send = lambda processing_path: KafkaProducerClient(
@@ -124,7 +122,7 @@ class OPTelebot:
         # Mersponse message List Id yang cocok dengan pattern regex ini
         @self.telebot.message_handler(
             func=lambda message: True if re.match(
-                pattern=r'([a-fA-F0-9]{40})\n?', string=message.text
+                pattern=r'([a-fA-F0-9])\n?', string=message.text
             ) else False
         )
         async def list_id_handler(message):
@@ -141,11 +139,10 @@ class OPTelebot:
             listId = message.text.split("\n")
             self.local_conf.update({"listId": listId})
 
-            # Processing Path Options
             markup = types.InlineKeyboardMarkup()
-            regular = types.InlineKeyboardButton("Regular", callback_data="regular")
-            reprocess = types.InlineKeyboardButton("Reprocess", callback_data="reprocess")
-            markup.add(regular, reprocess)
+            logging = types.InlineKeyboardButton("Logging", callback_data="logging")
+            ipd = types.InlineKeyboardButton("IPD", callback_data="ipd")
+            markup.add(logging, ipd)
 
             await self.telebot.reply_to(
                     message=message, text=(
@@ -156,13 +153,40 @@ class OPTelebot:
             self.logger.info(f"Saved ListId to file ListId-{self.date_time}.json for user {fullname}")
 
             await self.telebot.send_document(chat_id=message.chat.id, document=doc)
-            await self.telebot.send_message(
-                chat_id=message.chat.id, text="📝 Specify a processing path <b>( <i>Regular</i> OR <i>Reprocess</i> )</b>", 
+            msg = await self.telebot.send_message(
+                chat_id=message.chat.id, text="🌞 Specify a data raw source from <b>( <i>Logging</i> OR <i>IPD</i> )</b>", 
+                reply_markup=markup, parse_mode="HTML"
+            )
+            self.local_conf.update({"replay_markup_id": msg.message_id})
+        
+        @self.telebot.callback_query_handler(func=lambda call: call.data in ["ipd", "logging"])
+        async def ipd_handler(call):
+            # Processing Path Options
+            if call.data == "ipd":
+                path1, path2 = "Regular", "Reprocess"
+                self.local_conf.update({"data_source": call.data})
+                self.local_conf.update({"index": "ipd-news-online*"})
+                markup = types.InlineKeyboardMarkup()
+                regular = types.InlineKeyboardButton("Regular", callback_data="regular")
+                reprocess = types.InlineKeyboardButton("Reprocess", callback_data="reprocess")
+                markup.add(regular, reprocess)
+            else:
+                path1, path2 = "Regular", "Regular-Flag"
+                self.local_conf.update({"data_source": call.data})
+                markup = types.InlineKeyboardMarkup()
+                regular = types.InlineKeyboardButton("Regular", callback_data="regular")
+                reprocess = types.InlineKeyboardButton("Regular-Flag", callback_data="regular-flag")
+                markup.add(regular, reprocess)
+
+            message_id = self.local_conf.get("replay_markup_id")
+        
+            await self.telebot.edit_message_text(
+                chat_id=call.message.chat.id, message_id=message_id, text=f"📝 Specify a processing path <b>( <i>{path1}</i> OR <i>{path2}</i> )</b>", 
                 reply_markup=markup, parse_mode="HTML"
             )
         
         # Menghandle call untuk mengambil value nya
-        @self.telebot.callback_query_handler(func=lambda call: True)
+        @self.telebot.callback_query_handler(func=lambda call: call.data in ["regular", "reprocess", "regular-flag"])
         async def processing_path(call):
             '''
             Melakukan query ke elasticsearch berdasarkan IDs yang dikirim oleh User.
@@ -176,9 +200,42 @@ class OPTelebot:
                 ), parse_mode="HTML"
             )
 
+            index_markup = types.InlineKeyboardMarkup()
+            facebook_comment = types.InlineKeyboardButton("logging-result-facebook-comment-*", callback_data="logging-result-facebook-comment-*")
+            facebook_post = types.InlineKeyboardButton("logging-result-facebook-post-*", callback_data="logging-result-facebook-post-*")
+            instagram_comment = types.InlineKeyboardButton("logging-result-instagram-comment-*", callback_data="logging-result-instagram-comment-*")
+            instagram_post = types.InlineKeyboardButton("logging-result-instagram-post-*", callback_data="logging-result-instagram-post-*")
+            media_quest = types.InlineKeyboardButton("logging-result-media-quest*", callback_data="logging-result-media-quest*")
+            online_news = types.InlineKeyboardButton("logging-result-online-news-*", callback_data="logging-result-online-news-*")
+            printed_news = types.InlineKeyboardButton("logging-result-printed-news-*", callback_data="logging-result-printed-news-*")
+            tiktok_comment = types.InlineKeyboardButton("logging-result-tiktok-comment-*", callback_data="logging-result-tiktok-comment-*")
+            tiktok_post = types.InlineKeyboardButton("logging-result-tiktok-post-*", callback_data="logging-result-tiktok-post-*")
+            tv_news = types.InlineKeyboardButton("logging-result-tv-news-*", callback_data="logging-result-tv-news-*")
+            twitter_post = types.InlineKeyboardButton("logging-result-twitter-post-*", callback_data="logging-result-twitter-post-*")
+            youtube_comment = types.InlineKeyboardButton("logging-result-youtube-comment-*", callback_data="logging-result-youtube-comment-*")
+            youtube_post = types.InlineKeyboardButton("logging-result-youtube-post-*", callback_data="logging-result-youtube-post-*")
+            index_markup.add(
+                facebook_comment, facebook_post, instagram_comment, instagram_post, media_quest, online_news, printed_news,
+                tiktok_comment, tiktok_post, tv_news, twitter_post, youtube_comment, youtube_post, row_width=1
+            )
+            await self.telebot.send_message(
+                chat_id=call.message.chat.id, text="🎞 Specify a index pattern for <b>( <i>Logging</i> )</b>", 
+                reply_markup=index_markup, parse_mode="HTML"
+            )
+
+        @self.telebot.callback_query_handler(func=lambda call: re.match(pattern=r'logging-result.*', string=call.data))
+        async def query_elastic(call):
+            self.local_conf.update({"index": call.data})
+            self.logger.info(f"User {call.from_user.username} selected index pattern: {call.data}")
+
+            await self.telebot.send_message(
+                chat_id=call.message.chat.id, text=f"📌 <b>Index Pattern for queries is <i>{call.data}</i></b>", parse_mode="HTML"
+            )
+
             try:
                 # Melakukan query searching ke index dan id yang ditentukan
-                resp = self.query.search(ids=self.local_conf["listId"])
+                query = Query(hosts=self.config["IPD_ES_URL"] if self.local_conf.get("data_source") == "ipd" else self.config["LOGGING_ES_URL"])
+                resp = query.search(ids=self.local_conf["listId"], index_pattern=self.local_conf.get("index"))
                 self.local_conf.update({"query_result": resp}) # Menyimpan hasil query ke local conf
                 self.logger.info(f"Elasticsearch query successful for user {call.from_user.username}")
             except Exception as err:
@@ -191,8 +248,8 @@ class OPTelebot:
 
             await self.telebot.send_message(
                 chat_id=call.message.chat.id, text=(
-                    "🔎 Query results to <a href='http://10.12.3.200:5200/'>Elasticsearch</a>\n"
-                    "With this Index Pattern <b>( <i>ipd-news-online*</i> )</b> can be seen below 👇"
+                    f"🔎 Query results to <a href='{self.config["IPD_ES_URL"] if self.local_conf.get("data_source") == "ipd" else self.config["LOGGING_ES_URL"]}'>Elasticsearch</a>\n"
+                    f"With this Index Pattern <b>( <i>{self.local_conf.get('index')}</i> )</b> can be seen below 👇"
                 ) if resp else (
                     "🚨 No results found for query Elasticsearch. Check /log for details."
                 ), parse_mode="HTML"

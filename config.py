@@ -4,22 +4,23 @@ class Config:
     NUM_BYTES = 3900
 
     # Elasticsearch
-    ES_URL = "http://10.12.3.200:5200/"
-    ES_HOST = "10.12.3.200"
+    IPD_ES_URL = "http://10.12.3.200:5200/"
+    LOGGING_ES_URL = "http://192.168.21.100:5200/"
 
     # Kafka
-    BOOTSTRAP_SERVER = ["10.0.0.3:9092"]
+    BOOTSTRAP_SERVER = ['kafka01.production02.bt:9092','kafka02.production02.bt:9092','kafka03.production02.bt:9092','kafka04.production02.bt:9092','kafka05.production02.bt:9092','kafka06.production02.bt:9092']
     TOPICS = {
         "regular": "online-news",
+        "regular-flag": "online-news-flag",
         "reprocess": "online-news-reprocess"
     }
 
-    # Define Host and Port
+    # Define Host and Port for log app
     HOST = "192.168.20.136"
     PORT = "9898"
 
     # Telegram
-    TELEGRAM_TOKEN = "6991087594:AAHwt9o0a0Dpji8TA-1-jVV5B2_fWbVzoSg"
+    TELEGRAM_TOKEN = "7489023152:AAF95SiNy4A8MC4nzEDNEmLOqpEqGW4mnIM"
     GROUP_ID = "-4244608457"
 
     # API Description
