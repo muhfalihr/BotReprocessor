@@ -122,7 +122,7 @@ class OPTelebot:
         # Mersponse message List Id yang cocok dengan pattern regex ini
         @self.telebot.message_handler(
             func=lambda message: True if re.match(
-                pattern=r'([a-fA-F0-9])\n?', string=message.text
+                pattern=r'([a-zA-Z0-9]|\d+_\d+)\n?', string=message.text
             ) else False
         )
         async def list_id_handler(message):
@@ -167,26 +167,43 @@ class OPTelebot:
                 self.local_conf.update({"data_source": call.data})
                 self.local_conf.update({"index": "ipd-news-online*"})
                 markup = types.InlineKeyboardMarkup()
-                regular = types.InlineKeyboardButton("Regular", callback_data="regular")
-                reprocess = types.InlineKeyboardButton("Reprocess", callback_data="reprocess")
+                regular = types.InlineKeyboardButton("Regular", callback_data="online-news")
+                reprocess = types.InlineKeyboardButton("Reprocess", callback_data="online-news-reprocess")
                 markup.add(regular, reprocess)
             else:
-                path1, path2 = "Regular", "Regular-Flag"
                 self.local_conf.update({"data_source": call.data})
-                markup = types.InlineKeyboardMarkup()
-                regular = types.InlineKeyboardButton("Regular", callback_data="regular")
-                reprocess = types.InlineKeyboardButton("Regular-Flag", callback_data="regular-flag")
-                markup.add(regular, reprocess)
 
-            message_id = self.local_conf.get("replay_markup_id")
-        
+                index_markup = types.InlineKeyboardMarkup()
+                facebook_comment = types.InlineKeyboardButton("logging-result-facebook-comment-*", callback_data="logging-result-facebook-comment-*")
+                facebook_post = types.InlineKeyboardButton("logging-result-facebook-post-*", callback_data="logging-result-facebook-post-*")
+                instagram_comment = types.InlineKeyboardButton("logging-result-instagram-comment-*", callback_data="logging-result-instagram-comment-*")
+                instagram_post = types.InlineKeyboardButton("logging-result-instagram-post-*", callback_data="logging-result-instagram-post-*")
+                online_news = types.InlineKeyboardButton("logging-result-online-news-*", callback_data="logging-result-online-news-*")
+                printed_news = types.InlineKeyboardButton("logging-result-printed-news-*", callback_data="logging-result-printed-news-*")
+                tiktok_comment = types.InlineKeyboardButton("logging-result-tiktok-comment-*", callback_data="logging-result-tiktok-comment-*")
+                tiktok_post = types.InlineKeyboardButton("logging-result-tiktok-post-*", callback_data="logging-result-tiktok-post-*")
+                tv_news = types.InlineKeyboardButton("logging-result-tv-news-*", callback_data="logging-result-tv-news-*")
+                twitter_post = types.InlineKeyboardButton("logging-result-twitter-post-*", callback_data="logging-result-twitter-post-*")
+                youtube_comment = types.InlineKeyboardButton("logging-result-youtube-comment-*", callback_data="logging-result-youtube-comment-*")
+                youtube_post = types.InlineKeyboardButton("logging-result-youtube-post-*", callback_data="logging-result-youtube-post-*")
+                index_markup.add(
+                    facebook_comment, facebook_post, instagram_comment, instagram_post, online_news, printed_news,
+                    tiktok_comment, tiktok_post, tv_news, twitter_post, youtube_comment, youtube_post, row_width=1
+                )
+                await self.telebot.send_message(
+                    chat_id=call.message.chat.id, text="🎞 Specify a index pattern for <b>( <i>Logging</i> )</b>", 
+                    reply_markup=index_markup, parse_mode="HTML"
+                )
+
+            msg_id = self.local_conf.get("replay_markup_id")
+
             await self.telebot.edit_message_text(
-                chat_id=call.message.chat.id, message_id=message_id, text=f"📝 Specify a processing path <b>( <i>{path1}</i> OR <i>{path2}</i> )</b>", 
+                chat_id=call.message.chat.id, message_id=msg_id, text=f"📝 Specify a processing path <b>( <i>{path1}</i> OR <i>{path2}</i> )</b>", 
                 reply_markup=markup, parse_mode="HTML"
             )
         
         # Menghandle call untuk mengambil value nya
-        @self.telebot.callback_query_handler(func=lambda call: call.data in ["regular", "reprocess", "regular-flag"])
+        @self.telebot.callback_query_handler(func=lambda call: call.data in ["online-news", "online-news-reprocess"])
         async def processing_path(call):
             '''
             Melakukan query ke elasticsearch berdasarkan IDs yang dikirim oleh User.
@@ -200,41 +217,9 @@ class OPTelebot:
                 ), parse_mode="HTML"
             )
 
-            index_markup = types.InlineKeyboardMarkup()
-            facebook_comment = types.InlineKeyboardButton("logging-result-facebook-comment-*", callback_data="logging-result-facebook-comment-*")
-            facebook_post = types.InlineKeyboardButton("logging-result-facebook-post-*", callback_data="logging-result-facebook-post-*")
-            instagram_comment = types.InlineKeyboardButton("logging-result-instagram-comment-*", callback_data="logging-result-instagram-comment-*")
-            instagram_post = types.InlineKeyboardButton("logging-result-instagram-post-*", callback_data="logging-result-instagram-post-*")
-            media_quest = types.InlineKeyboardButton("logging-result-media-quest*", callback_data="logging-result-media-quest*")
-            online_news = types.InlineKeyboardButton("logging-result-online-news-*", callback_data="logging-result-online-news-*")
-            printed_news = types.InlineKeyboardButton("logging-result-printed-news-*", callback_data="logging-result-printed-news-*")
-            tiktok_comment = types.InlineKeyboardButton("logging-result-tiktok-comment-*", callback_data="logging-result-tiktok-comment-*")
-            tiktok_post = types.InlineKeyboardButton("logging-result-tiktok-post-*", callback_data="logging-result-tiktok-post-*")
-            tv_news = types.InlineKeyboardButton("logging-result-tv-news-*", callback_data="logging-result-tv-news-*")
-            twitter_post = types.InlineKeyboardButton("logging-result-twitter-post-*", callback_data="logging-result-twitter-post-*")
-            youtube_comment = types.InlineKeyboardButton("logging-result-youtube-comment-*", callback_data="logging-result-youtube-comment-*")
-            youtube_post = types.InlineKeyboardButton("logging-result-youtube-post-*", callback_data="logging-result-youtube-post-*")
-            index_markup.add(
-                facebook_comment, facebook_post, instagram_comment, instagram_post, media_quest, online_news, printed_news,
-                tiktok_comment, tiktok_post, tv_news, twitter_post, youtube_comment, youtube_post, row_width=1
-            )
-            await self.telebot.send_message(
-                chat_id=call.message.chat.id, text="🎞 Specify a index pattern for <b>( <i>Logging</i> )</b>", 
-                reply_markup=index_markup, parse_mode="HTML"
-            )
-
-        @self.telebot.callback_query_handler(func=lambda call: re.match(pattern=r'logging-result.*', string=call.data))
-        async def query_elastic(call):
-            self.local_conf.update({"index": call.data})
-            self.logger.info(f"User {call.from_user.username} selected index pattern: {call.data}")
-
-            await self.telebot.send_message(
-                chat_id=call.message.chat.id, text=f"📌 <b>Index Pattern for queries is <i>{call.data}</i></b>", parse_mode="HTML"
-            )
-
             try:
                 # Melakukan query searching ke index dan id yang ditentukan
-                query = Query(hosts=self.config["IPD_ES_URL"] if self.local_conf.get("data_source") == "ipd" else self.config["LOGGING_ES_URL"])
+                query = Query(hosts=self.config["IPD_ES_URL"])
                 resp = query.search(ids=self.local_conf["listId"], index_pattern=self.local_conf.get("index"))
                 self.local_conf.update({"query_result": resp}) # Menyimpan hasil query ke local conf
                 self.logger.info(f"Elasticsearch query successful for user {call.from_user.username}")
@@ -248,7 +233,7 @@ class OPTelebot:
 
             await self.telebot.send_message(
                 chat_id=call.message.chat.id, text=(
-                    f"🔎 Query results to <a href='{self.config["IPD_ES_URL"] if self.local_conf.get("data_source") == "ipd" else self.config["LOGGING_ES_URL"]}'>Elasticsearch</a>\n"
+                    f"🔎 Query results to <a href='{self.config['IPD_ES_URL']}'>Elasticsearch</a>\n"
                     f"With this Index Pattern <b>( <i>{self.local_conf.get('index')}</i> )</b> can be seen below 👇"
                 ) if resp else (
                     "🚨 No results found for query Elasticsearch. Check /log for details."
@@ -261,7 +246,55 @@ class OPTelebot:
                     f"⛔ The data is not ready to be sent to the <b>Kafka {self.config['TOPICS'].get(self.local_conf['processing_path'])} Topic</b>"
                 ), parse_mode="HTML"
             )
-        
+
+        @self.telebot.callback_query_handler(func=lambda call: re.match(pattern=r'logging-result.*', string=call.data))
+        async def query_elastic(call):
+            self.local_conf.update({"index": call.data})
+            self.logger.info(f"User {call.from_user.username} selected index pattern: {call.data}")
+
+            await self.telebot.send_message(
+                chat_id=call.message.chat.id, text=f"📌 <b>Index Pattern for queries is <i>{call.data}</i></b>", parse_mode="HTML"
+            )
+
+            specify_topic = self.specify_topic(index_pattern=call.data)
+            topic = self.config["TOPICS"].get(specify_topic)
+
+            await self.telebot.send_message(chat_id=call.message.chat.id, text=(
+                f"📌 <b>TOPIC <i>{topic}</i></b>"
+                ), parse_mode="HTML"
+            )
+
+            try:
+                # Melakukan query searching ke index dan id yang ditentukan
+                query = Query(hosts=self.config["LOGGING_ES_URL"])
+                resp = query.search(ids=self.local_conf["listId"], index_pattern=self.local_conf.get("index"))
+                self.local_conf.update({"query_result": resp}) # Menyimpan hasil query ke local conf
+                self.logger.info(f"Elasticsearch query successful for user {call.from_user.username}")
+            except Exception as err:
+                self.logger.error(f"{err}")
+                resp = {}
+                self.local_conf.update({"query_result": resp})
+
+            dumps = json.dumps(resp, indent=4) if resp else dict().__str__() # Menjadikan hasil query yang awalnya list json ke string
+            doc = self._str_to_bytes(string=dumps, name=f"QueryResult-{self.date_time}.json") if resp else ... # Mengubah string ke bytes untuk dijadikan file
+
+            await self.telebot.send_message(
+                chat_id=call.message.chat.id, text=(
+                    f"🔎 Query results to <a href='{self.config['LOGGING_ES_URL']}'>Elasticsearch</a>\n"
+                    f"With this Index Pattern <b>( <i>{self.local_conf.get('index')}</i> )</b> can be seen below 👇"
+                ) if resp else (
+                    "🚨 No results found for query Elasticsearch. Check /log for details."
+                ), parse_mode="HTML"
+            )
+            await self.telebot.send_document(chat_id=call.message.chat.id, document=doc) if resp else ...
+            await self.telebot.send_message(chat_id=call.message.chat.id, text=(
+                f"✅ The data is ready to be sent to the  <b>Kafka {topic} Topic</b> 📨"
+                ) if resp else (
+                    f"⛔ The data is not ready to be sent to the <b>Kafka {topic} Topic</b>"
+                ), parse_mode="HTML"
+            )
+
+
         # Menghandle message yang tidak diketahui atau tidak sesuai
         @self.telebot.message_handler(func=lambda message: True)
         async def instruction(message):
@@ -269,6 +302,33 @@ class OPTelebot:
             handling message yang tidak dikethui atau tidak sesuai dari User
             '''
             await self.telebot.send_message(chat_id=message.chat.id, text="Unrecognized command. Say what?")
+    
+    def specify_topic(self, index_pattern: str):
+        if re.match(r'.*-facebook-comment-\*', index_pattern):
+            return "facebook-comment"
+        if re.match(r'.*-facebook-post-\*', index_pattern):
+            return "facebook-post"
+        if re.match(r'.*-instagram-comment-\*', index_pattern):
+            return "instagram-comment"
+        if re.match(r'.*-instagram-post-\*', index_pattern):
+            return "instagram-post"
+        if re.match(r'.*-online-news-\*', index_pattern):
+            return "online-news-flag"
+        if re.match(r'.*-printed-news-\*', index_pattern):
+            return "printed-news"
+        if re.match(r'.*-tiktok-comment-\*', index_pattern):
+            return "tiktok-comment"
+        if re.match(r'.*-tiktok-post-\*', index_pattern):
+            return "tiktok-post"
+        if re.match(r'.*-tv-news-\*', index_pattern):
+            return "tv-news"
+        if re.match(r'.*-twitter-post-\*', index_pattern):
+            return "twitter-post"
+        if re.match(r'.*-youtube-comment-\*', index_pattern):
+            return "youtube-comment"
+        if re.match(r'.*-youtube-post-\*', index_pattern):
+            return "youtube-post"
+        
 
     def _config(self, object: object):
         '''

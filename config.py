@@ -10,9 +10,20 @@ class Config:
     # Kafka
     BOOTSTRAP_SERVER = ['kafka01.production02.bt:9092','kafka02.production02.bt:9092','kafka03.production02.bt:9092','kafka04.production02.bt:9092','kafka05.production02.bt:9092','kafka06.production02.bt:9092']
     TOPICS = {
-        "regular": "online-news",
-        "regular-flag": "online-news-flag",
-        "reprocess": "online-news-reprocess"
+        "online-news": "online-news",
+        "online-news-reprocess": "online-news-reprocess",
+        "facebook-post": "ipd-facebook-post-flag",
+        "facebook-comment": "ipd-facebook-comment-flag",
+        "instagram-comment": "ipd-instagram-comment-flag",
+        "instagram-post": "ipd-instagram-post-flag",
+        "online-news-flag": "online-news-flag",
+        "printed-news": "printed-news-flag",
+        "tiktok-comment": "ipd-tiktok-comment-flag",
+        "tiktok-post": "ipd-tiktok-post-flag",
+        "tv-news": "tv-news-flag",
+        "twitter-post": "ipd-twitter-post-flag",
+        "youtube-comment": "ipd-youtube-comment-flag",
+        "youtube-post": "ipd-youtube-post-flag"
     }
 
     # Define Host and Port for log app
