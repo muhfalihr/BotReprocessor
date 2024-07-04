@@ -4,8 +4,8 @@ class Config:
     NUM_BYTES = 3900
 
     # Elasticsearch
-    IPD_ES_URL = "http://10.12.3.200:5200/"
-    LOGGING_ES_URL = "http://192.168.21.100:5200/"
+    IPD_ES_URL = "<ES_URL>"
+    LOGGING_ES_URL = "<ES_URL>"
 
     # Kafka
     BOOTSTRAP_SERVER = ['kafka01.production02.bt:9092','kafka02.production02.bt:9092','kafka03.production02.bt:9092','kafka04.production02.bt:9092','kafka05.production02.bt:9092','kafka06.production02.bt:9092']
@@ -27,12 +27,12 @@ class Config:
     }
 
     # Define Host and Port for log app
-    HOST = "192.168.20.136"
-    PORT = "9898"
+    HOST = "<HOST>"
+    PORT = "<PORT>"
 
     # Telegram
-    TELEGRAM_TOKEN = "7489023152:AAF95SiNy4A8MC4nzEDNEmLOqpEqGW4mnIM"
-    GROUP_ID = "-4244608457"
+    TELEGRAM_TOKEN = "<TOKEN>"
+    GROUP_ID = "<GROUP_ID>"
 
     # API Description
     API_DESC = """
