@@ -31,9 +31,9 @@ class OPTelebot:
         )
 
         # mendefinisikan class KafkaProducerClient
-        self.send = lambda processing_path: KafkaProducerClient(
+        self.send = lambda topic: KafkaProducerClient(
             bootstrap_servers=self.config["BOOTSTRAP_SERVER"],
-            topic=self.config["TOPICS"].get(processing_path)
+            topic=self.config["TOPICS"].get(topic)
         )
 
         self.local_conf = dict() # konfigurasi dari hasil interaksi dengan user
@@ -61,7 +61,7 @@ class OPTelebot:
             Mengirimkan data ke Topic Kafka yang ditentukan.
             '''
             fullname = f"{message.from_user.first_name} {message.from_user.last_name}" if message.from_user.last_name else message.from_user.first_name
-            topic_name = self.config['TOPICS'].get(self.local_conf['processing_path'])
+            topic_name = self.local_conf['topic']
             
             msg = await self.telebot.send_message(
                 chat_id=message.chat.id, text=(
@@ -170,6 +170,13 @@ class OPTelebot:
                 regular = types.InlineKeyboardButton("Regular", callback_data="online-news")
                 reprocess = types.InlineKeyboardButton("Reprocess", callback_data="online-news-reprocess")
                 markup.add(regular, reprocess)
+
+                msg_id = self.local_conf.get("replay_markup_id")
+
+                await self.telebot.edit_message_text(
+                    chat_id=call.message.chat.id, message_id=msg_id, text=f"📝 Specify a processing path <b>( <i>{path1}</i> OR <i>{path2}</i> )</b>", 
+                    reply_markup=markup, parse_mode="HTML"
+                )
             else:
                 self.local_conf.update({"data_source": call.data})
 
@@ -194,26 +201,19 @@ class OPTelebot:
                     chat_id=call.message.chat.id, text="🎞 Specify a index pattern for <b>( <i>Logging</i> )</b>", 
                     reply_markup=index_markup, parse_mode="HTML"
                 )
-
-            msg_id = self.local_conf.get("replay_markup_id")
-
-            await self.telebot.edit_message_text(
-                chat_id=call.message.chat.id, message_id=msg_id, text=f"📝 Specify a processing path <b>( <i>{path1}</i> OR <i>{path2}</i> )</b>", 
-                reply_markup=markup, parse_mode="HTML"
-            )
         
         # Menghandle call untuk mengambil value nya
         @self.telebot.callback_query_handler(func=lambda call: call.data in ["online-news", "online-news-reprocess"])
-        async def processing_path(call):
+        async def define_topic(call):
             '''
             Melakukan query ke elasticsearch berdasarkan IDs yang dikirim oleh User.
             Dan hasil query tersebut akan dikirimkan ke User.
             '''
-            self.local_conf.update({"processing_path": call.data})
+            self.local_conf.update({"topic": call.data})
             self.logger.info(f"User {call.from_user.username} selected processing path: {call.data}")
 
             await self.telebot.send_message(chat_id=call.message.chat.id, text=(
-                f"📌 <b>TOPIC <i>{self.config['TOPICS'].get(call.data)}</i></b>"
+                f"📌 <b>TOPIC <i>{call.data}</i></b>"
                 ), parse_mode="HTML"
             )
 
@@ -241,9 +241,9 @@ class OPTelebot:
             )
             await self.telebot.send_document(chat_id=call.message.chat.id, document=doc) if resp else ...
             await self.telebot.send_message(chat_id=call.message.chat.id, text=(
-                f"✅ The data is ready to be sent to the  <b>Kafka {self.config['TOPICS'].get(self.local_conf['processing_path'])} Topic</b> 📨"
+                f"✅ The data is ready to be sent to the  <b>Kafka {self.local_conf['topic']} Topic</b> 📨"
                 ) if resp else (
-                    f"⛔ The data is not ready to be sent to the <b>Kafka {self.config['TOPICS'].get(self.local_conf['processing_path'])} Topic</b>"
+                    f"⛔ The data is not ready to be sent to the <b>Kafka {self.local_conf['topic']} Topic</b>"
                 ), parse_mode="HTML"
             )
 
@@ -258,6 +258,7 @@ class OPTelebot:
 
             specify_topic = self.specify_topic(index_pattern=call.data)
             topic = self.config["TOPICS"].get(specify_topic)
+            self.local_conf.update({"topic": topic})
 
             await self.telebot.send_message(chat_id=call.message.chat.id, text=(
                 f"📌 <b>TOPIC <i>{topic}</i></b>"
@@ -356,7 +357,7 @@ class OPTelebot:
         '''
         Function untuk mengirimkan data ke Topic kafka yang ditentukan
         '''
-        send = self.send(processing_path=self.local_conf['processing_path'])
+        send = self.send(topic=self.local_conf['topic'])
         for qr in self.local_conf['query_result']:
             send.send_message(message=qr)
             self.logger.info(qr.__str__())
