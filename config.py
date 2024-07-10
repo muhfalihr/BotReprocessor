@@ -6,6 +6,7 @@ class Config:
     # Elasticsearch
     IPD_ES_URL = "http://10.12.3.200:5200/"
     LOGGING_ES_URL = "http://192.168.21.100:5200/"
+    AI_ES_URL = "http://10.12.1.50:5200/"
 
     # Kafka
     BOOTSTRAP_SERVER = ['kafka01.production02.bt:9092','kafka02.production02.bt:9092','kafka03.production02.bt:9092','kafka04.production02.bt:9092','kafka05.production02.bt:9092','kafka06.production02.bt:9092']
@@ -23,7 +24,9 @@ class Config:
         "tv-news": "tv-news-flag",
         "twitter-post": "ipd-twitter-post-flag",
         "youtube-comment": "ipd-youtube-comment-flag",
-        "youtube-post": "ipd-youtube-post-flag"
+        "youtube-post": "ipd-youtube-post-flag",
+        "printed-news-raw": "printed-news",
+        "tv-news-raw": "tv-news"
     }
 
     # Define Host and Port for log app
@@ -31,7 +34,8 @@ class Config:
     PORT = "9090"
 
     # Telegram
-    TELEGRAM_TOKEN = "7489023152:AAF95SiNy4A8MC4nzEDNEmLOqpEqGW4mnIM"
+    # TELEGRAM_TOKEN = "7489023152:AAF95SiNy4A8MC4nzEDNEmLOqpEqGW4mnIM"
+    TELEGRAM_TOKEN = "6991087594:AAHwt9o0a0Dpji8TA-1-jVV5B2_fWbVzoSg"
 
     # API Description
     API_DESC = """

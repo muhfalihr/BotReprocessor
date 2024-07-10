@@ -33,7 +33,7 @@ class OPTelebot:
         # mendefinisikan class KafkaProducerClient
         self.send = lambda topic: KafkaProducerClient(
             bootstrap_servers=self.config["BOOTSTRAP_SERVER"],
-            topic=self.config["TOPICS"].get(topic)
+            topic=topic
         )
 
         self.local_conf = dict() # konfigurasi dari hasil interaksi dengan user
@@ -140,9 +140,10 @@ class OPTelebot:
             self.local_conf.update({"listId": listId})
 
             markup = types.InlineKeyboardMarkup()
-            logging = types.InlineKeyboardButton("Logging", callback_data="logging")
+            ai = types.InlineKeyboardButton("AI", callback_data="ai")
             ipd = types.InlineKeyboardButton("IPD", callback_data="ipd")
-            markup.add(logging, ipd)
+            logging = types.InlineKeyboardButton("Logging", callback_data="logging")
+            markup.add(ai, ipd, logging)
 
             await self.telebot.reply_to(
                     message=message, text=(
@@ -159,7 +160,7 @@ class OPTelebot:
             )
             self.local_conf.update({"replay_markup_id": msg.message_id})
         
-        @self.telebot.callback_query_handler(func=lambda call: call.data in ["ipd", "logging"])
+        @self.telebot.callback_query_handler(func=lambda call: call.data in ["ai", "ipd", "logging"])
         async def ipd_handler(call):
             # Processing Path Options
             if call.data == "ipd":
@@ -176,6 +177,16 @@ class OPTelebot:
                 await self.telebot.edit_message_text(
                     chat_id=call.message.chat.id, message_id=msg_id, text=f"📝 Specify a processing path <b>( <i>{path1}</i> OR <i>{path2}</i> )</b>", 
                     reply_markup=markup, parse_mode="HTML"
+                )
+            elif call.data == "ai":
+                self.local_conf.update({"data_source": call.data})
+                index_markup = types.InlineKeyboardMarkup()
+                printed_news = types.InlineKeyboardButton("printed-news-raw-*", callback_data="printed-news-raw-*")
+                tv_news = types.InlineKeyboardButton("tv-news-raw-2024*", callback_data="tv-news-raw-2024*")
+                index_markup.add(printed_news, tv_news)
+                await self.telebot.send_message(
+                    chat_id=call.message.chat.id, text="🎞 Specify a index pattern for <b>( <i>AI</i> )</b>", 
+                    reply_markup=index_markup, parse_mode="HTML"
                 )
             else:
                 self.local_conf.update({"data_source": call.data})
@@ -294,7 +305,54 @@ class OPTelebot:
                     f"⛔ The data is not ready to be sent to the <b>Kafka {topic} Topic</b>"
                 ), parse_mode="HTML"
             )
+        
+        @self.telebot.callback_query_handler(func=lambda call: call.data in ["printed-news-raw-*", "tv-news-raw-2024*"])
+        async def query_elastic_ai(call):
+            self.local_conf.update({"index": call.data})
+            self.logger.info(f"User {call.from_user.username} selected index pattern: {call.data}")
 
+            await self.telebot.send_message(
+                chat_id=call.message.chat.id, text=f"📌 <b>Index Pattern for queries is <i>{call.data}</i></b>", parse_mode="HTML"
+            )
+
+            specify_topic = self.specify_topic(index_pattern=call.data)
+            topic = self.config["TOPICS"].get(specify_topic)
+            self.local_conf.update({"topic": topic})
+
+            await self.telebot.send_message(chat_id=call.message.chat.id, text=(
+                f"📌 <b>TOPIC <i>{topic}</i></b>"
+                ), parse_mode="HTML"
+            )
+
+            try:
+                # Melakukan query searching ke index dan id yang ditentukan
+                query = Query(hosts=self.config["AI_ES_URL"])
+                resp = query.search(ids=self.local_conf["listId"], index_pattern=self.local_conf.get("index"))
+                self.local_conf.update({"query_result": resp}) # Menyimpan hasil query ke local conf
+                self.logger.info(f"Elasticsearch query successful for user {call.from_user.username}")
+            except Exception as err:
+                self.logger.error(f"{err}")
+                resp = {}
+                self.local_conf.update({"query_result": resp})
+
+            dumps = json.dumps(resp, indent=4) if resp else dict().__str__() # Menjadikan hasil query yang awalnya list json ke string
+            doc = self._str_to_bytes(string=dumps, name=f"QueryResult-{self.date_time}.json") if resp else ... # Mengubah string ke bytes untuk dijadikan file
+
+            await self.telebot.send_message(
+                chat_id=call.message.chat.id, text=(
+                    f"🔎 Query results to <a href='{self.config['AI_ES_URL']}'>Elasticsearch</a>\n"
+                    f"With this Index Pattern <b>( <i>{self.local_conf.get('index')}</i> )</b> can be seen below 👇"
+                ) if resp else (
+                    "🚨 No results found for query Elasticsearch. Check /log for details."
+                ), parse_mode="HTML"
+            )
+            await self.telebot.send_document(chat_id=call.message.chat.id, document=doc) if resp else ...
+            await self.telebot.send_message(chat_id=call.message.chat.id, text=(
+                f"✅ The data is ready to be sent to the  <b>Kafka {topic} Topic</b> 📨"
+                ) if resp else (
+                    f"⛔ The data is not ready to be sent to the <b>Kafka {topic} Topic</b>"
+                ), parse_mode="HTML"
+            )
 
         # Menghandle message yang tidak diketahui atau tidak sesuai
         @self.telebot.message_handler(func=lambda message: True)
@@ -329,7 +387,10 @@ class OPTelebot:
             return "youtube-comment"
         if re.match(r'.*-youtube-post-\*', index_pattern):
             return "youtube-post"
-        
+        if re.match(r'^printed-news-raw-.*', index_pattern):
+            return "printed-news-raw"
+        if re.match(r'^tv-news-raw-2024.*', index_pattern):
+            return "tv-news-raw"
 
     def _config(self, object: object):
         '''

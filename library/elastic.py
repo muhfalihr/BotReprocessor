@@ -27,7 +27,14 @@ class Query:
         **kwargs : dict
             A dictionary of parameters to configure the Elasticsearch client.
         '''
-        self.es = Elasticsearch(**kwargs, headers={"Content-Type": "application/json"}, timeout=120)
+        self.headers = {
+            "Content-Type": "application/json",
+            "Authorization": "Basic ZmFsaWg6cmFoYXNpYTIwMjQ="
+        }
+        self.es = Elasticsearch(
+            **kwargs, headers={"Content-Type": "application/json"} if kwargs.get("hosts") != "http://10.12.1.50:5200/" else self.headers,
+            timeout=120
+        )
     
     def search(self, ids: List[str], index_pattern: str):
         '''
@@ -75,6 +82,10 @@ class Query:
             if re.match(pattern=r'logging-result.*', string=index_pattern):
                 for hit in hits:
                     source = hit.get("_source").get("raw")
+                    sources.append(source)
+            if re.match(pattern=r'(^printed-news-raw-.*|^tv-news-raw-2024.*)', string=index_pattern):
+                for hit in hits:
+                    source = hit.get("_source")
                     sources.append(source)
 
         return sources
