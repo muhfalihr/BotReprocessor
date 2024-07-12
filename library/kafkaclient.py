@@ -1,4 +1,6 @@
+import time
 import json
+import logging
 
 from kafka import KafkaProducer, errors as kafka_errors
 
@@ -31,6 +33,7 @@ class KafkaProducerClient:
         config : dict
             Configuration dictionary containing the bootstrap servers and topic.
         """
+        self.logger = logging.getLogger(self.__class__.__name__)
         self.bootstrap_servers = config.get("bootstrap_servers")
         self.topic = config.get("topic")
         self.producer = KafkaProducer(
@@ -56,10 +59,11 @@ class KafkaProducerClient:
         """
         try:
             self.producer.send(topic=self.topic, value=message)
+            time.sleep(3.0)
         except kafka_errors.KafkaError as err:
-            raise kafka_errors.KafkaError(f"{err}")
+            self.logger.error(f"Kafka Error : {err}")
         except Exception as err:
-            raise Exception(f"{err}")
+            self.logger.error(f"Kafka Error : {err}")
     
     def close(self):
         """

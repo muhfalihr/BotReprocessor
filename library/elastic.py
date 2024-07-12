@@ -1,6 +1,9 @@
+import os
 import re
+import logging
 
 from typing import List
+from pathlib import Path
 from elasticsearch import Elasticsearch, ElasticsearchException
 
 class Query:
@@ -27,6 +30,7 @@ class Query:
         **kwargs : dict
             A dictionary of parameters to configure the Elasticsearch client.
         '''
+        self.logger = logging.getLogger(self.__class__.__name__)
         self.headers = {
             "Content-Type": "application/json",
             "Authorization": "Basic ZmFsaWg6cmFoYXNpYTIwMjQ="
@@ -36,6 +40,23 @@ class Query:
             timeout=120
         )
     
+    def _file_is_exists(self, filename: str, id=None):
+        pwd = os.getcwd()
+        path = pwd + "/id_not_found/" + filename
+        
+        file_path = Path(path)
+
+        if file_path.is_file():
+            if os.path.getsize(path) > 0 and id is None:
+                with open(file=path, mode="w") as file:
+                    pass
+            else:
+                with open(file=path, mode="a") as file:
+                    file.write((id + "\n"))
+        else:
+            with open(file=path, mode="w") as file:
+                pass
+
     def search(self, ids: List[str], index_pattern: str):
         '''
         Queries the Elasticsearch index for documents matching the provided list of IDs.
@@ -56,36 +77,44 @@ class Query:
             If no results are found for any of the provided IDs.
         '''
         sources = []
+
+        self._file_is_exists(filename="ids.txt")
+
         for id in ids:
-            full_resp = self.es.search(
-                index=index_pattern,
-                body={
-                    "query": {
-                        "match": {
-                            "id": id
-                        } if re.match(pattern=r'ipd.*', string=index_pattern) else {
-                            "_id": id
+            try:
+                full_resp = self.es.search(
+                    index=index_pattern,
+                    body={
+                        "query": {
+                            "match": {
+                                "id": id
+                            } if re.match(pattern=r'ipd.*', string=index_pattern) else {
+                                "_id": id
+                            }
                         }
                     }
-                }
-            )
-            hits = full_resp.get("hits").get("hits")
-            
-            if not hits:
-                msg = {"query": {"match": {"_id": id}}, "response": full_resp}
-                raise ElasticsearchException(f"No results found for query: {msg}")
-            
-            if re.match(pattern=r'ipd.*', string=index_pattern):
-                for hit in hits:
-                    source = hit.get("_source")
-                    sources.append(source)
-            if re.match(pattern=r'logging-result.*', string=index_pattern):
-                for hit in hits:
-                    source = hit.get("_source").get("raw")
-                    sources.append(source)
-            if re.match(pattern=r'(^printed-news-raw-.*|^tv-news-raw-2024.*)', string=index_pattern):
-                for hit in hits:
-                    source = hit.get("_source")
-                    sources.append(source)
+                )
+                hits = full_resp.get("hits").get("hits")
+                
+                if not hits:
+                    msg = {"query": {"match": {"_id": id}}, "response": full_resp}
+                    self._file_is_exists(filename="ids.txt", id=id)
+                    self.logger.error(f"No results found for query id {id} : {msg}")
+                
+                if re.match(pattern=r'ipd.*', string=index_pattern):
+                    for hit in hits:
+                        source = hit.get("_source")
+                        sources.append(source)
+                if re.match(pattern=r'logging-result.*', string=index_pattern):
+                    for hit in hits:
+                        source = hit.get("_source").get("raw")
+                        sources.append(source)
+                if re.match(pattern=r'(^printed-news-raw-.*|^tv-news-raw-2024.*)', string=index_pattern):
+                    for hit in hits:
+                        source = hit.get("_source")
+                        sources.append(source)
+
+            except ElasticsearchException as err:
+                self.logger.error(f"Elasticsearch error : {err}")
 
         return sources

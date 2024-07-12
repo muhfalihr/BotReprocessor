@@ -119,6 +119,33 @@ class OPTelebot:
                 ), parse_mode="Markdown"
             )
 
+        @self.telebot.message_handler(content_types=["document"])
+        async def list_id_doc(message):
+            if message.document.mime_type in ['text/plain', 'text/csv']:
+                file_info = await self.telebot.get_file(message.document.file_id)
+                downloaded_file = await self.telebot.download_file(file_info.file_path)
+
+                # Membaca isi file dan memproses per baris
+                listId = []
+                with io.BytesIO(downloaded_file) as file:
+                    for line in file:
+                        listId.append(line.decode('utf-8').strip())
+                        
+                self.local_conf.update({"listId": listId})
+
+                markup = types.InlineKeyboardMarkup()
+                ai = types.InlineKeyboardButton("AI", callback_data="ai")
+                ipd = types.InlineKeyboardButton("IPD", callback_data="ipd")
+                logging = types.InlineKeyboardButton("Logging", callback_data="logging")
+                markup.add(ai, ipd, logging)
+
+                msg = await self.telebot.send_message(
+                    chat_id=message.chat.id, text="🌞 Specify a data raw source from <b>( <i>Logging</i> OR <i>IPD</i> )</b>", 
+                    reply_markup=markup, parse_mode="HTML"
+                )
+                self.local_conf.update({"replay_markup_id": msg.message_id})
+
+
         # Mersponse message List Id yang cocok dengan pattern regex ini
         @self.telebot.message_handler(
             func=lambda message: True if re.match(
