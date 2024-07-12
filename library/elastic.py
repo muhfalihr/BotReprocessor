@@ -43,14 +43,14 @@ class Query:
     def _file_is_exists(self, filename: str, id=None):
         pwd = os.getcwd()
         path = pwd + "/id_not_found/" + filename
-        
+
         file_path = Path(path)
 
         if file_path.is_file():
             if os.path.getsize(path) > 0 and id is None:
                 with open(file=path, mode="w") as file:
                     pass
-            else:
+            elif id:
                 with open(file=path, mode="a") as file:
                     file.write((id + "\n"))
         else:
@@ -114,7 +114,7 @@ class Query:
                         source = hit.get("_source")
                         sources.append(source)
 
-            except ElasticsearchException as err:
+            except (ElasticsearchException, Exception) as err:
                 self.logger.error(f"Elasticsearch error : {err}")
 
         return sources
