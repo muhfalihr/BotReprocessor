@@ -36,6 +36,7 @@ class KafkaProducerClient:
         self.logger = logging.getLogger(self.__class__.__name__)
         self.bootstrap_servers = config.get("bootstrap_servers")
         self.topic = config.get("topic")
+        self.time_sleep = config.get("time_sleep")
         self.producer = KafkaProducer(
             bootstrap_servers=self.bootstrap_servers,
             value_serializer=lambda v: json.dumps(v).encode('utf-8')
@@ -59,7 +60,7 @@ class KafkaProducerClient:
         """
         try:
             self.producer.send(topic=self.topic, value=message)
-            time.sleep(3.0)
+            time.sleep(self.time_sleep)
         except kafka_errors.KafkaError as err:
             self.logger.error(f"Kafka Error : {err}")
         except Exception as err:

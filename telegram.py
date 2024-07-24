@@ -5,451 +5,268 @@ import logging
 import json
 
 from typing import *
-from config import Config
-from telebot import types, async_telebot
-from utility.utilites import *
-from library.elastic import Query
-from library.kafkaclient import KafkaProducerClient
-from kafka import errors as kafka_errors
+from telebot.async_telebot import AsyncTeleBot
+from telebot import apihelper
+from telebot.types import Message
+from utility import *
+from library import query, kafka_producer
 from logger import setup_logging
 from datetime import datetime
 from time import time
 
-class OPTelebot:
+class BotReprocess:
+    
+    INDEX_PATTERNS = []
+    DATETIME_FORMAT = "%Y%m%dT%H%M%S"
+    PATTERN_VALIDATION_ID = r"([a-zA-Z0-9]|\d+_\d+)\n?"
+
     def __init__(self) -> None:
         """
         Automation to make it easier to produce data from elasticsearch query results to the specified Kafka topic.
         """
-        self.config = self._config(Config) # mengambil konfigurasi di file config.py
-
-        setup_logging(log_path=self.config["LOG_PATH"]) # setup log dengan path yang ditentukan
-        self.logger = logging.getLogger(self.__class__.__name__)
+        self.util = kang_util()
+        self.important = dict()
+        self.config = self.util.get_config(__file__)
         
-        # mendefinisikan telebot dengan tokennya
-        self.telebot = async_telebot.AsyncTeleBot(
-            token=self.config["TELEGRAM_TOKEN"]
-        )
+        self._AI = self.config[ "AI" ]
+        self._IPD = self.config[ "IPD" ]
+        self._HOST = self.config[ "HOST" ]
+        self._PORT = self.config[ "PORT" ]
+        self._LOG = self.config[ "LOGGING" ]
+        self._ERROR = self.config[ "ERROR" ]
+        self._SOURCE = self.config[ "SOURCE" ]
+        self._LOG_PATH = self.config[ "LOG_PATH" ]
+        self._NUM_BYTES = self.config[ "NUM_BYTES" ]
+        self._AI_ES_URL = self.config[ "AI_ES_URL" ]
+        self._IPD_ES_URL = self.config[ "IPD_ES_URL" ]
+        self._TIME_SLEEP = self.config[ "TIME_SLEEP" ]
+        self._LOGGING_ES_URL = self.config[ "LOGGING_ES_URL" ]
+        self._TELEGRAM_TOKEN = self.config[ "TELEGRAM_TOKEN" ]
+        self._BOOTSTRAP_SERVER = self.config["BOOTSTRAP_SERVER"]
 
-        # mendefinisikan class KafkaProducerClient
-        self.send = lambda topic: KafkaProducerClient(
-            bootstrap_servers=self.config["BOOTSTRAP_SERVER"],
-            topic=topic
-        )
+        self._INDEX_COLLECTION = self.util.index_collection( self.config )
+        self._EXTEND = self.util.extend_key( self._IPD, self._AI, self._LOG, self._ERROR )
 
-        self.local_conf = dict() # konfigurasi dari hasil interaksi dengan user
-        self.date_time = datetime.now().strftime("%Y%m%dT%H%M%S")
+        setup_logging( log_path=self._LOG_PATH )
 
-        # Meresponse message /start dari user
-        @self.telebot.message_handler(commands=["start"])
-        async def start(message):
-            '''
-            Memulai Program. User disuruh mengirimkan List ID.
-            '''
-            fullname = f"{message.from_user.first_name} {message.from_user.last_name}" if message.from_user.last_name else message.from_user.first_name
-            await self.telebot.send_message(
-                chat_id=message.chat.id, text=(
-                    f"👤 Req from user <i><b><a href='https://t.me/{message.from_user.username}' >SRE-{fullname}</a></b></i>\n\n"
-                    "🟠 <b>Submit a list of IDs!</b>"
-                ), parse_mode="HTML"
-            )
+        self.logger = self.util.get_logger( self.__class__.__name__ )
+        self.telebot = self.util.async_telebot( self._TELEGRAM_TOKEN )
+        self.date_time = self.util.current_datetime_str( self.DATETIME_FORMAT )
+
+        self.storage = lambda key, value: self.util.storage( self.important, key, value )
+        self.send = lambda topic: kafka_producer( bootstrap_servers=self._BOOTSTRAP_SERVER, topic=topic, time_sleep=self._TIME_SLEEP )
+
+
+        
+        @self.telebot.message_handler( commands=["start"] )
+        async def start( message ):
+            chat_id = message.chat.id
+            initial_message = message_bot.start( message )
+            await self.telebot.send_message( chat_id, initial_message[ "message" ], initial_message[ "parse_mode" ] )
             self.logger.info(f"Received /start command from {message.chat.id}")
-        
-        # Meresponse message /send dari user
-        @self.telebot.message_handler(commands=["send"])
-        async def send(message):
-            '''
-            Mengirimkan data ke Topic Kafka yang ditentukan.
-            '''
-            fullname = f"{message.from_user.first_name} {message.from_user.last_name}" if message.from_user.last_name else message.from_user.first_name
-            topic_name = self.local_conf['topic']
-            
-            msg = await self.telebot.send_message(
-                chat_id=message.chat.id, text=(
-                    f"👤 Req from user <i><b><a href='https://t.me/{message.from_user.username}' >SRE-{fullname}</a></b></i>\n\n"
-                    "<b>🔀 Data is being sent ...</b>\n"
-                    f"↳ <b>To <i>Topic {topic_name}</i></b>"
-                ), parse_mode="HTML"
-            )
 
-            bgn = time() # Waktu mulai
-            iserror = False # untuk pengkondisian error
 
+        @self.telebot.message_handler( commands=["send"] )
+        async def send( message ):
+            chat_id = message.chat.id
+            topic_name = self.important[ "topic_name" ]
+
+            initial_message = message_bot.send( message, topic_name )
+            save_message = await self.telebot.send_message( chat_id, initial_message[ "message" ], initial_message[ "parse_mode" ] )
+
+            start_time = time()
             try:
-                self.logger.info(f"Sending data to the Kafka topic [{topic_name}] for user {fullname}")
-                self._send_kafka() # Mengirim data ke topic kafka
-
-                end = time() # Waktu henti
-                time_exec = f"{( end - bgn ):.2f}" # Waktu yang diperlukan untuk mengirim data ke Topic Kafka
-                
-                self.logger.info(
-                    f"Data successfully sent to Kafka topic [{topic_name}] in {time_exec}s for user {fullname}"
-                )
-            except kafka_errors.KafkaError as err:
-                self.logger.error(f"Error sending data to Kafka: {err}")
-                time_exec = "N/A"
-                iserror = True
-
-            await self.telebot.edit_message_text(
-                chat_id=message.chat.id, message_id=msg.message_id, text=(
-                    f"👤 Req from user <i><b><a href='https://t.me/{message.from_user.username}' >SRE-{fullname}</a></b></i>\n\n"
-                    f"🟢 <b>Data Successfully Sent! {time_exec}s</b>\n"
-                    f"↳ <b>To <i>Topic {topic_name}</i></b>"
-                ) if not iserror else (
-                    f"👤 Req from user <i><b><a href='https://t.me/{message.from_user.username}' >SRE-{fullname}</a></b></i>\n\n"
-                    f"🔴 <b>Error sending data! {time_exec}s</b>\n"
-                    f"↳ <b>To <i>Topic {topic_name}</i></b>"
-                ), parse_mode="HTML"
-            )
-        
-        # Meresponse message /log dari user
-        @self.telebot.message_handler(commands=["log"])
-        async def log(message):
-            '''
-            Menampilkan Log ke User. Dengan ukuran default 1000 bytes.
-            '''
-            fullname = f"{message.from_user.first_name} {message.from_user.last_name}" if message.from_user.last_name else message.from_user.first_name
-            last_logs = view_log(log_path=self.config["LOG_PATH"], num_bytes=self.config["NUM_BYTES"]) # Mengambil last log dengan ukuran 1000 bytes
-            view_last_log = last_logs.decode(encoding="utf-8", errors="ignore") # Mendecode bytes ke utf-8 dan mengabaikan error
-
-            await self.telebot.send_message(
-                chat_id=message.chat.id, text=(
-                    f"👤 Req from user [SRE-{fullname}](https://t.me/{message.from_user.username})\n\n"
-                    "See [Full Log](http://192.168.20.136:9898/log) details.\n\n"
-                    f"```\n{view_last_log}```"
-                ), parse_mode="Markdown"
-            )
-
-        @self.telebot.message_handler(content_types=["document"])
-        async def list_id_doc(message):
-            if message.document.mime_type in ['text/plain', 'text/csv']:
-                file_info = await self.telebot.get_file(message.document.file_id)
-                downloaded_file = await self.telebot.download_file(file_info.file_path)
-
-                # Membaca isi file dan memproses per baris
-                listId = []
-                with io.BytesIO(downloaded_file) as file:
-                    for line in file:
-                        listId.append(line.decode('utf-8').strip())
-                        
-                self.local_conf.update({"listId": listId})
-
-                markup = types.InlineKeyboardMarkup()
-                ai = types.InlineKeyboardButton("AI", callback_data="ai")
-                ipd = types.InlineKeyboardButton("IPD", callback_data="ipd")
-                logging = types.InlineKeyboardButton("Logging", callback_data="logging")
-                markup.add(ai, ipd, logging)
-
-                msg = await self.telebot.send_message(
-                    chat_id=message.chat.id, text="🌞 Specify a data raw source from <b>( <i>Logging</i> OR <i>IPD</i> )</b>", 
-                    reply_markup=markup, parse_mode="HTML"
-                )
-                self.local_conf.update({"replay_markup_id": msg.message_id})
-
-
-        # Mersponse message List Id yang cocok dengan pattern regex ini
-        @self.telebot.message_handler(
-            func=lambda message: True if re.match(
-                pattern=r'([a-zA-Z0-9]|\d+_\d+)\n?', string=message.text
-            ) else False
-        )
-        async def list_id_handler(message):
-            '''
-            Menangkap List ID dari User dan di simpan ke local conf
-            '''
-            fullname = f"{message.from_user.first_name} {message.from_user.last_name}" if message.from_user.last_name else message.from_user.first_name
-            self.logger.info(f"Received valid ID list from {message.chat.id} by user {fullname}: {hashing(message.text)}")
-            
-            # Menjadikan message text ke bytes
-            doc = self._str_to_bytes(string=message.text, name=f"ListId-{self.date_time}.json")
-
-            # Mengubah List ID dari string ke List dan menambahkannya ke local conf
-            listId = message.text.split("\n")
-            self.local_conf.update({"listId": listId})
-
-            markup = types.InlineKeyboardMarkup()
-            ai = types.InlineKeyboardButton("AI", callback_data="ai")
-            ipd = types.InlineKeyboardButton("IPD", callback_data="ipd")
-            logging = types.InlineKeyboardButton("Logging", callback_data="logging")
-            markup.add(ai, ipd, logging)
-
-            await self.telebot.reply_to(
-                    message=message, text=(
-                       f"👤 Req from user <i><b><a href='https://t.me/{message.from_user.username}' >SRE-{fullname}</a></b></i>\n\n"
-                        "📥 Saving ListId into a file 📁"
-                    ), parse_mode="HTML"
-            )
-            self.logger.info(f"Saved ListId to file ListId-{self.date_time}.json for user {fullname}")
-
-            await self.telebot.send_document(chat_id=message.chat.id, document=doc)
-            msg = await self.telebot.send_message(
-                chat_id=message.chat.id, text="🌞 Specify a data raw source from <b>( <i>Logging</i> OR <i>IPD</i> )</b>", 
-                reply_markup=markup, parse_mode="HTML"
-            )
-            self.local_conf.update({"replay_markup_id": msg.message_id})
-        
-        @self.telebot.callback_query_handler(func=lambda call: call.data in ["ai", "ipd", "logging"])
-        async def ipd_handler(call):
-            # Processing Path Options
-            if call.data == "ipd":
-                path1, path2 = "Regular", "Reprocess"
-                self.local_conf.update({"data_source": call.data})
-                self.local_conf.update({"index": "ipd-news-online*"})
-                markup = types.InlineKeyboardMarkup()
-                regular = types.InlineKeyboardButton("Regular", callback_data="online-news")
-                reprocess = types.InlineKeyboardButton("Reprocess", callback_data="online-news-reprocess")
-                markup.add(regular, reprocess)
-
-                msg_id = self.local_conf.get("replay_markup_id")
-
+                self.logger.info(f"Sending data to the Kafka topic [{topic_name}]")
+                ...
+                exec_time = f"{( time() - start_time ):.2f}"    
+                initial_message = message_bot.success_send( message, topic_name, exec_time )
+                self.logger.info( f"Data successfully sent to Kafka topic [{topic_name}] in {exec_time}s" )
                 await self.telebot.edit_message_text(
-                    chat_id=call.message.chat.id, message_id=msg_id, text=f"📝 Specify a processing path <b>( <i>{path1}</i> OR <i>{path2}</i> )</b>", 
-                    reply_markup=markup, parse_mode="HTML"
+                    initial_message[ "message" ], chat_id, save_message.message_id, parse_mode=initial_message[ "parse_mode" ]
                 )
-            elif call.data == "ai":
-                self.local_conf.update({"data_source": call.data})
-                index_markup = types.InlineKeyboardMarkup()
-                printed_news = types.InlineKeyboardButton("printed-news-raw-*", callback_data="printed-news-raw-*")
-                tv_news = types.InlineKeyboardButton("tv-news-raw-2024*", callback_data="tv-news-raw-2024*")
-                index_markup.add(printed_news, tv_news)
+            except ( KafkaErrorException, KafkaConnectionError ) as err:
+                initial_message = message_bot.failed_send( message, topic_name, exec_time )
+                self.logger.error(f"Error sending data to Kafka: {err}")
+                await self.telebot.edit_message_text(
+                    initial_message[ "message" ], chat_id, save_message.message_id, parse_mode=initial_message[ "parse_mode" ]
+                )
+
+
+        @self.telebot.message_handler( commands=["log"] )
+        async def log( message ):
+            chat_id = message.chat.id
+            view_log = self.util.view_log( self._LOG_PATH, self._NUM_BYTES ).decode( "utf-8", "ignore" )
+            initial_message = message_bot.view_log( message, self._HOST, self._PORT, view_log )
+            await self.telebot.send_message( chat_id, initial_message[ "message" ], initial_message[ "parse_mode" ] )
+
+
+        @self.telebot.message_handler( content_types=["document"] )
+        async def list_id_doc( message ):
+            chat_id = message.chat.id
+            mime_type = message.document.mime_type
+            document_file_id = message.document.file_id
+            
+            file_info = await self.telebot.get_file(document_file_id)
+            downloaded_file = await self.telebot.download_file(file_info.file_path)
+            
+            if ( mime_type == "text/plain" ):    
+                list_id = self.util.readline_plain( downloaded_file )
+            elif ( mime_type == "text/csv" ):
+                list_id = self.util.readline_csv( downloaded_file )
+            self.storage( "list_id", list_id )
+            
+            ids = "".join( list_id )
+            fullname = self.util.format_fullname( message )
+            hashing_ids = self.util.hashing( ids )
+            self.logger.info( f"Received valid ID list from {chat_id} by user {fullname}: {hashing_ids}" )
+
+            markup = self.util.keyboard_markup( self._SOURCE )
+            initial_message = message_bot.markup_raw_source()
+            save_message = await self.telebot.send_message( chat_id, initial_message[ "message" ], initial_message[ "parse_mode" ], reply_markup=markup )
+            self.storage( "replay_markup_id", save_message.message_id )
+
+
+        @self.telebot.message_handler( func=lambda message: True if re.match( self.PATTERN_VALIDATION_ID, message.text ) else False )
+        async def message_id_from_user( message ):
+            chat_id = message.chat.id
+            message_text = message.text
+
+            markup = self.util.keyboard_markup( self._SOURCE )
+            hasing_ids = self.util.hashing( message_text )
+            fullname = self.util.format_fullname( message )
+            self.logger.info( f"Received valid ID list from {chat_id} by user {fullname}: {hasing_ids}" )
+
+            file_name = "list_id%s.json" % ( self.date_time )
+            file_doc = self.util.byters( message_text, file_name )
+            
+            list_id = message_text.split( "\n" )
+            self.storage( "list_id", list_id )
+
+            initial_message = message_bot.saving_list_id( message )
+            await self.telebot.reply_to( message, initial_message[ "message" ], parse_mode=initial_message[ "parse_mode" ] )
+            self.logger.info( "Saved ListId to file ListId-%s.json for user %s" % ( self.date_time, fullname ) )
+            
+            await self.telebot.send_document( chat_id, file_doc )
+
+            initial_message = message_bot.markup_raw_source()
+            save_message = await self.telebot.send_message( chat_id, initial_message[ "message" ], initial_message[ "parse_mode" ], reply_markup=markup )
+            self.storage( "replay_markup_id", save_message.message_id )
+
+
+        @self.telebot.callback_query_handler( func=lambda call: call.data in [ src for src in self.config[ "SOURCE" ].keys() ] )
+        async def data_source( call ):
+            source = self.config[ "SOURCE" ][ call.data ]
+            chat_id = call.message.chat.id
+            self.storage( "data_source", source )
+
+            if ( source == "ipd" ):
+                initial_message = message_bot.markup_processing_path()
+                message_id = self.important[ "replay_markup_id" ]
+                markup = self.util.keyboard_markup( self._IPD )
+                await self.telebot.edit_message_text(
+                    initial_message[ "message" ], chat_id, message_id, parse_mode=initial_message[ "parse_mode" ], reply_markup=markup
+                )
+            elif ( source == "ai" ):
+                markup = self.util.keyboard_markup( self._AI )
+                initial_message = message_bot.markup_index_pattern()
                 await self.telebot.send_message(
-                    chat_id=call.message.chat.id, text="🎞 Specify a index pattern for <b>( <i>AI</i> )</b>", 
-                    reply_markup=index_markup, parse_mode="HTML"
+                    chat_id, initial_message[ "message" ], initial_message[ "parse_mode" ], reply_markup=markup
                 )
+            elif ( source == "logging" ):
+                markup = self.util.keyboard_markup( self._LOG, row_width=1 )
+                initial_message = message_bot.markup_index_pattern( kibana="LOGGING" )
+                await self.telebot.send_message(
+                    chat_id, initial_message[ "message" ], initial_message[ "parse_mode" ], reply_markup=markup
+                )
+            elif ( source == "error" ):
+                markup = self.util.keyboard_markup( self._ERROR, row_width=1 )
+                initial_message = message_bot.markup_index_pattern( kibana="LOGGING" )
+                await self.telebot.send_message(
+                    chat_id, initial_message[ "message" ], initial_message[ "parse_mode" ], reply_markup=markup
+                )
+
+
+        @self.telebot.callback_query_handler( func=lambda call: call.data in [src for src in self._EXTEND ])
+        async def process( call ):
+            call_data = call.data
+            chat_id = call.message.chat.id
+            username = call.from_user.username
+            data_src = self.important[ "data_source" ]
+            
+            if ( data_src == "logging" ):
+                es_url = self._LOGGING_ES_URL
+                config_key = "LOGGING"
+            elif ( data_src == "error" ):
+                es_url = self._LOGGING_ES_URL
+                config_key = "ERROR"
+            elif ( data_src == "ai" ):
+                es_url = self._AI_ES_URL
+                config_key = "AI"
             else:
-                self.local_conf.update({"data_source": call.data})
+                es_url = self._IPD_ES_URL
+                config_key = "IPD"
 
-                index_markup = types.InlineKeyboardMarkup()
-                facebook_comment = types.InlineKeyboardButton("logging-result-facebook-comment-*", callback_data="logging-result-facebook-comment-*")
-                facebook_post = types.InlineKeyboardButton("logging-result-facebook-post-*", callback_data="logging-result-facebook-post-*")
-                instagram_comment = types.InlineKeyboardButton("logging-result-instagram-comment-*", callback_data="logging-result-instagram-comment-*")
-                instagram_post = types.InlineKeyboardButton("logging-result-instagram-post-*", callback_data="logging-result-instagram-post-*")
-                online_news = types.InlineKeyboardButton("logging-result-online-news-*", callback_data="logging-result-online-news-*")
-                printed_news = types.InlineKeyboardButton("logging-result-printed-news-*", callback_data="logging-result-printed-news-*")
-                tiktok_comment = types.InlineKeyboardButton("logging-result-tiktok-comment-*", callback_data="logging-result-tiktok-comment-*")
-                tiktok_post = types.InlineKeyboardButton("logging-result-tiktok-post-*", callback_data="logging-result-tiktok-post-*")
-                tv_news = types.InlineKeyboardButton("logging-result-tv-news-*", callback_data="logging-result-tv-news-*")
-                twitter_post = types.InlineKeyboardButton("logging-result-twitter-post-*", callback_data="logging-result-twitter-post-*")
-                youtube_comment = types.InlineKeyboardButton("logging-result-youtube-comment-*", callback_data="logging-result-youtube-comment-*")
-                youtube_post = types.InlineKeyboardButton("logging-result-youtube-post-*", callback_data="logging-result-youtube-post-*")
-                index_markup.add(
-                    facebook_comment, facebook_post, instagram_comment, instagram_post, online_news, printed_news,
-                    tiktok_comment, tiktok_post, tv_news, twitter_post, youtube_comment, youtube_post, row_width=1
-                )
-                await self.telebot.send_message(
-                    chat_id=call.message.chat.id, text="🎞 Specify a index pattern for <b>( <i>Logging</i> )</b>", 
-                    reply_markup=index_markup, parse_mode="HTML"
-                )
-        
-        # Menghandle call untuk mengambil value nya
-        @self.telebot.callback_query_handler(func=lambda call: call.data in ["online-news", "online-news-reprocess"])
-        async def define_topic(call):
-            '''
-            Melakukan query ke elasticsearch berdasarkan IDs yang dikirim oleh User.
-            Dan hasil query tersebut akan dikirimkan ke User.
-            '''
-            self.local_conf.update({"topic": call.data})
-            self.logger.info(f"User {call.from_user.username} selected processing path: {call.data}")
+            if ( data_src == "ipd" ):
+                topic_name = call_data
+                index_pattern = self.config[ config_key ][ call_data ]
+                self.storage( "topic_name", topic_name )
+            else:
+                index_pattern = call_data
+                topic_name = self.config[ config_key ][ index_pattern ]
+                self.storage( "index_pattern", index_pattern )
 
-            await self.telebot.send_message(chat_id=call.message.chat.id, text=(
-                f"📌 <b>TOPIC <i>{call.data}</i></b>"
-                ), parse_mode="HTML"
-            )
+            self.logger.info( "User %s selected topic name: %s" % ( username, topic_name ) )
+            self.logger.info( "User %s selected index pattern: %s" % ( username, index_pattern ) )
+            
+            initial_message = message_bot.topic_name( topic_name )
+            await self.telebot.send_message( chat_id, initial_message[ "message" ], initial_message[ "parse_mode" ] )
 
             try:
-                # Melakukan query searching ke index dan id yang ditentukan
-                query = Query(hosts=self.config["IPD_ES_URL"])
-                resp = query.search(ids=self.local_conf["listId"], index_pattern=self.local_conf.get("index"))
-                self.local_conf.update({"query_result": resp}) # Menyimpan hasil query ke local conf
-                self.logger.info(f"Elasticsearch query successful for user {call.from_user.username}")
-            except Exception as err:
-                self.logger.error(f"{err}")
-                resp = {}
-                self.local_conf.update({"query_result": resp})
+                list_ids = self.important[ "list_id" ]
+                search = query( hosts=es_url )
+                response, existing_ids, ids_not_found = search.search( list_ids, index_pattern )
 
-            dumps = json.dumps(resp, indent=4) if resp else dict().__str__() # Menjadikan hasil query yang awalnya list json ke string
-            doc = self._str_to_bytes(string=dumps, name=f"QueryResult-{self.date_time}.json") if resp else ... # Mengubah string ke bytes untuk dijadikan file
+                self.storage( "query_result", response )
+                self.logger.info( "Elasticsearch query successful for user %s" % ( username ) )
 
-            await self.telebot.send_message(
-                chat_id=call.message.chat.id, text=(
-                    f"🔎 Query results to <a href='{self.config['IPD_ES_URL']}'>Elasticsearch</a>\n"
-                    f"With this Index Pattern <b>( <i>{self.local_conf.get('index')}</i> )</b> can be seen below 👇"
-                ) if resp else (
-                    "🚨 No results found for query Elasticsearch. Check /log for details."
-                ), parse_mode="HTML"
-            )
-            await self.telebot.send_document(chat_id=call.message.chat.id, document=doc) if resp else ...
-            await self.telebot.send_message(chat_id=call.message.chat.id, text=(
-                f"✅ The data is ready to be sent to the  <b>Kafka {self.local_conf['topic']} Topic</b> 📨"
-                ) if resp else (
-                    f"⛔ The data is not ready to be sent to the <b>Kafka {self.local_conf['topic']} Topic</b>"
-                ), parse_mode="HTML"
-            )
+                dumper = json.dumps( response, indent=4 ) if response else dict().__str__()
+                doc_query_result = self.util.byters( dumper, "queryresult-%s.json" % ( self.date_time ) )
 
-        @self.telebot.callback_query_handler(func=lambda call: re.match(pattern=r'logging-result.*', string=call.data))
-        async def query_elastic(call):
-            self.local_conf.update({"index": call.data})
-            self.logger.info(f"User {call.from_user.username} selected index pattern: {call.data}")
+                initial_message = message_bot.query_result( es_url, index_pattern )
+                await self.telebot.send_message( chat_id, initial_message[ "message" ], initial_message[ "parse_mode" ] )
+                await self.telebot.send_document( chat_id, doc_query_result )
+                
+                if ids_not_found:
+                    idsnf = "\n".join( ids_not_found )
+                    doc_ids_not_found = self.util.byters( idsnf, "list-ids-not-found.txt" )
+                    await self.telebot.send_document( chat_id, doc_ids_not_found )
 
-            await self.telebot.send_message(
-                chat_id=call.message.chat.id, text=f"📌 <b>Index Pattern for queries is <i>{call.data}</i></b>", parse_mode="HTML"
-            )
+                if existing_ids:
+                    eids = "\n".join( existing_ids )
+                    doc_existing_ids = self.util.byters( eids, "list-existing-ids.txt" )
+                    await self.telebot.send_document( chat_id, doc_existing_ids )
 
-            specify_topic = self.specify_topic(index_pattern=call.data)
-            topic = self.config["TOPICS"].get(specify_topic)
-            self.local_conf.update({"topic": topic})
+                initial_message = message_bot.ready_sent( topic_name )
+                await self.telebot.send_message( chat_id, initial_message[ "message" ], initial_message[ "parse_mode" ] )
+            
+            except ElasticsearchErrorException as err:
+                self.logger.error( "%s" % ( err ) )
 
-            await self.telebot.send_message(chat_id=call.message.chat.id, text=(
-                f"📌 <b>TOPIC <i>{topic}</i></b>"
-                ), parse_mode="HTML"
-            )
+                initial_message = message_bot.no_result_query( es_url )
+                await self.telebot.send_message( chat_id, initial_message[ "message" ], initial_message[ "parse_mode" ] )
 
-            try:
-                # Melakukan query searching ke index dan id yang ditentukan
-                query = Query(hosts=self.config["LOGGING_ES_URL"])
-                resp = query.search(ids=self.local_conf["listId"], index_pattern=self.local_conf.get("index"))
-                self.local_conf.update({"query_result": resp}) # Menyimpan hasil query ke local conf
-                self.logger.info(f"Elasticsearch query successful for user {call.from_user.username}")
-            except Exception as err:
-                self.logger.error(f"{err}")
-                resp = {}
-                self.local_conf.update({"query_result": resp})
+                initial_message = message_bot.not_ready_sent( topic_name )
+                await self.telebot.send_message( chat_id, initial_message[ "message" ], initial_message[ "parse_mode" ] )
 
-            dumps = json.dumps(resp, indent=4) if resp else dict().__str__() # Menjadikan hasil query yang awalnya list json ke string
-            doc = self._str_to_bytes(string=dumps, name=f"QueryResult-{self.date_time}.json") if resp else ... # Mengubah string ke bytes untuk dijadikan file
-
-            await self.telebot.send_message(
-                chat_id=call.message.chat.id, text=(
-                    f"🔎 Query results to <a href='{self.config['LOGGING_ES_URL']}'>Elasticsearch</a>\n"
-                    f"With this Index Pattern <b>( <i>{self.local_conf.get('index')}</i> )</b> can be seen below 👇"
-                ) if resp else (
-                    "🚨 No results found for query Elasticsearch. Check /log for details."
-                ), parse_mode="HTML"
-            )
-            await self.telebot.send_document(chat_id=call.message.chat.id, document=doc) if resp else ...
-            await self.telebot.send_message(chat_id=call.message.chat.id, text=(
-                f"✅ The data is ready to be sent to the  <b>Kafka {topic} Topic</b> 📨"
-                ) if resp else (
-                    f"⛔ The data is not ready to be sent to the <b>Kafka {topic} Topic</b>"
-                ), parse_mode="HTML"
-            )
-        
-        @self.telebot.callback_query_handler(func=lambda call: call.data in ["printed-news-raw-*", "tv-news-raw-2024*"])
-        async def query_elastic_ai(call):
-            self.local_conf.update({"index": call.data})
-            self.logger.info(f"User {call.from_user.username} selected index pattern: {call.data}")
-
-            await self.telebot.send_message(
-                chat_id=call.message.chat.id, text=f"📌 <b>Index Pattern for queries is <i>{call.data}</i></b>", parse_mode="HTML"
-            )
-
-            specify_topic = self.specify_topic(index_pattern=call.data)
-            topic = self.config["TOPICS"].get(specify_topic)
-            self.local_conf.update({"topic": topic})
-
-            await self.telebot.send_message(chat_id=call.message.chat.id, text=(
-                f"📌 <b>TOPIC <i>{topic}</i></b>"
-                ), parse_mode="HTML"
-            )
-
-            try:
-                # Melakukan query searching ke index dan id yang ditentukan
-                query = Query(hosts=self.config["AI_ES_URL"])
-                resp = query.search(ids=self.local_conf["listId"], index_pattern=self.local_conf.get("index"))
-                self.local_conf.update({"query_result": resp}) # Menyimpan hasil query ke local conf
-                self.logger.info(f"Elasticsearch query successful for user {call.from_user.username}")
-            except Exception as err:
-                self.logger.error(f"{err}")
-                resp = {}
-                self.local_conf.update({"query_result": resp})
-
-            dumps = json.dumps(resp, indent=4) if resp else dict().__str__() # Menjadikan hasil query yang awalnya list json ke string
-            doc = self._str_to_bytes(string=dumps, name=f"QueryResult-{self.date_time}.json") if resp else ... # Mengubah string ke bytes untuk dijadikan file
-
-            await self.telebot.send_message(
-                chat_id=call.message.chat.id, text=(
-                    f"🔎 Query results to <a href='{self.config['AI_ES_URL']}'>Elasticsearch</a>\n"
-                    f"With this Index Pattern <b>( <i>{self.local_conf.get('index')}</i> )</b> can be seen below 👇"
-                ) if resp else (
-                    "🚨 No results found for query Elasticsearch. Check /log for details."
-                ), parse_mode="HTML"
-            )
-            await self.telebot.send_document(chat_id=call.message.chat.id, document=doc) if resp else ...
-            await self.telebot.send_message(chat_id=call.message.chat.id, text=(
-                f"✅ The data is ready to be sent to the  <b>Kafka {topic} Topic</b> 📨"
-                ) if resp else (
-                    f"⛔ The data is not ready to be sent to the <b>Kafka {topic} Topic</b>"
-                ), parse_mode="HTML"
-            )
-
-        # Menghandle message yang tidak diketahui atau tidak sesuai
-        @self.telebot.message_handler(func=lambda message: True)
-        async def instruction(message):
-            '''
-            handling message yang tidak dikethui atau tidak sesuai dari User
-            '''
-            await self.telebot.send_message(chat_id=message.chat.id, text="Unrecognized command. Say what?")
-    
-    def specify_topic(self, index_pattern: str):
-        if re.match(r'.*-facebook-comment-\*', index_pattern):
-            return "facebook-comment"
-        if re.match(r'.*-facebook-post-\*', index_pattern):
-            return "facebook-post"
-        if re.match(r'.*-instagram-comment-\*', index_pattern):
-            return "instagram-comment"
-        if re.match(r'.*-instagram-post-\*', index_pattern):
-            return "instagram-post"
-        if re.match(r'.*-online-news-\*', index_pattern):
-            return "online-news-flag"
-        if re.match(r'.*-printed-news-\*', index_pattern):
-            return "printed-news"
-        if re.match(r'.*-tiktok-comment-\*', index_pattern):
-            return "tiktok-comment"
-        if re.match(r'.*-tiktok-post-\*', index_pattern):
-            return "tiktok-post"
-        if re.match(r'.*-tv-news-\*', index_pattern):
-            return "tv-news"
-        if re.match(r'.*-twitter-post-\*', index_pattern):
-            return "twitter-post"
-        if re.match(r'.*-youtube-comment-\*', index_pattern):
-            return "youtube-comment"
-        if re.match(r'.*-youtube-post-\*', index_pattern):
-            return "youtube-post"
-        if re.match(r'^printed-news-raw-.*', index_pattern):
-            return "printed-news-raw"
-        if re.match(r'^tv-news-raw-2024.*', index_pattern):
-            return "tv-news-raw"
-
-    def _config(self, object: object):
-        '''
-        Menjadikan value dari object ke dictionary
-
-        Argument:
-            object (object): Object
-        
-        Returns:
-            object.__dict__ (dict)
-        '''
-        config = object.__dict__
-        return config
-    
-    def _str_to_bytes(self, string: str, name: str):
-        '''
-        Mengubah string ke bytes
-        '''
-        doc = io.BytesIO(string.encode())
-        doc.name = name
-        self.logger.debug(f"Converted string to bytes with name {name}")
-        return doc
-    
-    def _send_kafka(self):
+    def produce_message(self):
         '''
         Function untuk mengirimkan data ke Topic kafka yang ditentukan
         '''
-        send = self.send(topic=self.local_conf['topic'])
-        for qr in self.local_conf['query_result']:
-            send.send_message(message=qr)
-            self.logger.info(qr.__str__())
-        send.close()
+        send_message = self.send( self.important[ "topic_name" ] )
+        for message in self.important[ "query_result" ]:
+            send_message.send_message( message )
+            self.logger.info( message.__str__() )
+        send_message.close()
 
     async def start_polling(self):
         '''
@@ -460,7 +277,7 @@ class OPTelebot:
         self.logger.info("Bot polling has stopped.")
 
 if __name__ == "__main__":
-    OT = OPTelebot()
+    OT = BotReprocess()
     try:
         asyncio.run(OT.start_polling())
     except (KeyboardInterrupt, SystemExit):

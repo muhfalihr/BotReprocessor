@@ -4,7 +4,7 @@ import logging
 
 from flask_restx import Api, Resource, fields
 from flask import Flask, request, Response
-from config import Config
+from test.config import Config
 from elasticsearch import Elasticsearch
 from kafka import KafkaProducer
 from logger import setup_logging

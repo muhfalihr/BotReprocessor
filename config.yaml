@@ -1,0 +1,71 @@
+config:
+  # Telegram
+  #TELEGRAM_TOKEN: "7489023152:AAF95SiNy4A8MC4nzEDNEmLOqpEqGW4mnIM"
+  TELEGRAM_TOKEN: "6991087594:AAHwt9o0a0Dpji8TA-1-jVV5B2_fWbVzoSg"
+
+  # Log
+  LOG_PATH: '/tmp/onp'
+  NUM_BYTES: 3900
+
+  # LogApp
+  HOST: "10.0.0.60"
+  PORT: "9090"
+
+  # Elasticsearch
+  IPD_ES_URL: "http://10.12.3.200:5200/"
+  LOGGING_ES_URL: "http://192.168.21.100:5200/"
+  AI_ES_URL: "http://10.12.1.50:5200/"
+
+   # Kafka
+  BOOTSTRAP_SERVER:
+    - 'kafka01.production02.bt:9092'
+    - 'kafka02.production02.bt:9092'
+    - 'kafka03.production02.bt:9092'
+    - 'kafka04.production02.bt:9092'
+    - 'kafka05.production02.bt:9092'
+    - 'kafka06.production02.bt:9092'
+  
+  TIME_SLEEP: 5.0
+  
+  # Define Index Pattern dan Topics
+  SOURCE:
+    AI: 'ai'
+    IPD: 'ipd'
+    LOGGING: 'logging'
+    ERROR: 'error'
+
+  IPD:
+    online-news: 'ipd-news-online*'
+    online-news-reprocess: 'ipd-news-online*'
+
+  AI:
+    printed-news-raw-*: 'printed-news'
+    tv-news-raw-2024*: 'tv-news'
+  
+  LOGGING:
+    logging-result-facebook-comment-*: 'ipd-facebook-comment-flag'
+    logging-result-facebook-post-*: 'ipd-facebook-post-flag'
+    logging-result-instagram-comment-*: 'ipd-instagram-comment-flag'
+    logging-result-instagram-post-*: 'ipd-instagram-post-flag'
+    logging-result-online-news-*: 'online-news-flag'
+    logging-result-printed-news-*: 'printed-news-flag'
+    logging-result-tiktok-comment-*: 'ipd-tiktok-comment-flag'
+    logging-result-tiktok-post-*: 'ipd-tiktok-post-flag'
+    logging-result-tv-news-*: 'tv-news-flag'
+    logging-result-twitter-post-*: 'ipd-twitter-post-flag'
+    logging-result-youtube-comment-*: 'ipd-youtube-comment-flag'
+    logging-result-youtube-post-*: 'ipd-youtube-post-flag'
+
+  ERROR:
+    error-facebook-comment-*: 'ipd-facebook-comment-flag'
+    error-facebook-post-*: 'ipd-facebook-post-flag'
+    error-instagram-comment-*: 'ipd-instagram-comment-flag'
+    error-instagram-post-*: 'ipd-instagram-post-flag'
+    error-online-news-*: 'online-news-flag'
+    error-printed-news-*: 'printed-news-flag'
+    error-tiktok-comment-*: 'ipd-tiktok-comment-flag'
+    error-tiktok-post-*: 'ipd-tiktok-post-flag'
+    error-tv-news-*: 'tv-news-flag'
+    error-twitter-post-*: 'ipd-twitter-post-flag'
+    error-youtube-comment-*: 'ipd-youtube-comment-flag'
+    error-youtube-post-*: 'ipd-youtube-post-flag'

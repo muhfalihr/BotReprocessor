@@ -39,23 +39,6 @@ class Query:
             **kwargs, headers={"Content-Type": "application/json"} if kwargs.get("hosts") != "http://10.12.1.50:5200/" else self.headers,
             timeout=120
         )
-    
-    def _file_is_exists(self, filename: str, id=None):
-        pwd = os.getcwd()
-        path = pwd + "/id_not_found/" + filename
-
-        file_path = Path(path)
-
-        if file_path.is_file():
-            if os.path.getsize(path) > 0 and id is None:
-                with open(file=path, mode="w") as file:
-                    pass
-            elif id:
-                with open(file=path, mode="a") as file:
-                    file.write((id + "\n"))
-        else:
-            with open(file=path, mode="w") as file:
-                pass
 
     def search(self, ids: List[str], index_pattern: str):
         '''
@@ -77,8 +60,8 @@ class Query:
             If no results are found for any of the provided IDs.
         '''
         sources = []
-
-        self._file_is_exists(filename="ids.txt")
+        existing_ids = []
+        ids_not_found = []
 
         for id in ids:
             try:
@@ -98,23 +81,39 @@ class Query:
                 
                 if not hits:
                     msg = {"query": {"match": {"_id": id}}, "response": full_resp}
-                    self._file_is_exists(filename="ids.txt", id=id)
+                    ids_not_found.append(id)
                     self.logger.error(f"No results found for query id {id} : {msg}")
                 
                 if re.match(pattern=r'ipd.*', string=index_pattern):
                     for hit in hits:
                         source = hit.get("_source")
                         sources.append(source)
-                if re.match(pattern=r'logging-result.*', string=index_pattern):
+                        existing_ids.append(id)
+                if re.match(pattern=r'^logging-result.*|error-(?!.*news).*', string=index_pattern):
                     for hit in hits:
                         source = hit.get("_source").get("raw")
+
+                        if "error_status" in source:
+                            source.pop("error_status")
+
                         sources.append(source)
+                        existing_ids.append(id)
+                if re.match(pattern=r'error-.*news.*', string=index_pattern):
+                    for hit in hits:
+                        source = hit.get("_source").get("data")
+
+                        if "error_status" in source:
+                            source.pop("error_status")
+
+                        sources.append(source)
+                        existing_ids.append(id)
                 if re.match(pattern=r'(^printed-news-raw-.*|^tv-news-raw-2024.*)', string=index_pattern):
                     for hit in hits:
                         source = hit.get("_source")
                         sources.append(source)
+                        existing_ids.append(id)
 
             except (ElasticsearchException, Exception) as err:
                 self.logger.error(f"Elasticsearch error : {err}")
 
-        return sources
+        return sources, existing_ids, ids_not_found

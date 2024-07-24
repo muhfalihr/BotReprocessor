@@ -1,9 +1,11 @@
-from flask import Flask, Response, render_template_string
-from config import Config
 import os
+from utility import kang_util
 
+from flask import Flask, Response, render_template_string
+
+util = kang_util()
 app = Flask(__name__)
-config = Config.__dict__
+config = util.get_config(__file__)
 
 @app.route('/log')
 def log_page():
