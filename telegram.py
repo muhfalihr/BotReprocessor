@@ -77,7 +77,7 @@ class BotReprocess:
             start_time = time()
             try:
                 self.logger.info(f"Sending data to the Kafka topic [{topic_name}]")
-                ...
+                self.produce_message()
                 exec_time = f"{( time() - start_time ):.2f}"    
                 initial_message = message_bot.success_send( message, topic_name, exec_time )
                 self.logger.info( f"Data successfully sent to Kafka topic [{topic_name}] in {exec_time}s" )
@@ -209,11 +209,13 @@ class BotReprocess:
             if ( data_src == "ipd" ):
                 topic_name = call_data
                 index_pattern = self.config[ config_key ][ call_data ]
+                self.storage( "index_pattern", index_pattern )
                 self.storage( "topic_name", topic_name )
             else:
                 index_pattern = call_data
                 topic_name = self.config[ config_key ][ index_pattern ]
                 self.storage( "index_pattern", index_pattern )
+                self.storage( "topic_name", topic_name )
 
             self.logger.info( "User %s selected topic name: %s" % ( username, topic_name ) )
             self.logger.info( "User %s selected index pattern: %s" % ( username, index_pattern ) )
