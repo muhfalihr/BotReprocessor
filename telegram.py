@@ -175,17 +175,25 @@ class BotReprocess:
                 index_source = self._IPD.get( data_group )
                 index_dest = self.util.get_key_by_value( self._IMA_NDC, data_group )
 
+            initial_message = message_bot.currently_querying()
+            save_message = await self.telebot.send_message( chat_id, initial_message[ "message" ], initial_message[ "parse_mode" ] )
+            message_id = save_message.message_id
+
             elastic = query( hosts=es_url ) if data_group == "online-news" else query( hosts=es_url, http_auth=http_auth )
             ids = elastic.get_ids_doc( index_source, gt_lt, id=field_id, time=field_time_source )
             
             elastic = query( hosts=es_url_dest, http_auth=http_auth_dest )
-            ids_result = elastic.id_comparison_doc( index_dest, ids, id=field_id, time=field_time_dest )
             
+            initial_message = message_bot.comparison_id()
+            save_message = await self.telebot.edit_message_text( initial_message[ "message" ], chat_id, message_id, parse_mode=initial_message[ "parse_mode" ] )
+            message_id = save_message.message_id
+            
+            ids_result = elastic.id_comparison_doc( index_dest, ids, id=field_id, time=field_time_dest )
             ids_result = "\n".join( ids_result )
             ids_doc = self.util.byters( ids_result, "list-id-result-comparison.txt" )
             
-            initial_message = message_bot.return_ids( call.message, ids_result )
-            await self.telebot.send_message( chat_id, initial_message[ "message" ], initial_message[ "parse_mode" ] )
+            initial_message = message_bot.return_ids()
+            await self.telebot.edit_message_text( initial_message[ "message" ], chat_id, message_id, parse_mode=initial_message[ "parse_mode" ] )
             await self.telebot.send_document( chat_id, ids_doc )
 
         @self.telebot.message_handler( func=lambda message: True if re.match( self.PATTERN_VALIDATION_ID, message.text ) else False )

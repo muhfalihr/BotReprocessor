@@ -53,12 +53,6 @@ class MessageBot:
         fullname = MessageBot._format_fullname(message)
         content = f"See [Full Log](http://{host}:{port}/log) details.\n\n```\n{log}```"
         return MessageBot._create_message(message.from_user.username, fullname, content, "Markdown")
-    
-    @staticmethod
-    def return_ids(message, ids) -> Dict[str, str]:
-        fullname = MessageBot._format_fullname(message)
-        content = f"<b>List ID results of comparison:</b>"
-        return MessageBot._create_message(message.from_user.username, fullname, content)
 
     @staticmethod
     def markup_message(content: str) -> Dict[str, str]:
@@ -112,4 +106,19 @@ class MessageBot:
     @staticmethod
     def index_pattern(index_pattern: str) -> Dict[str, str]:
         content = f"📌 <b>Index Pattern for queries is <i>{index_pattern}</i></b>"
+        return MessageBot._create_simple_message(content)
+    
+    @staticmethod
+    def currently_querying() -> Dict[str, str]:
+        content = "<b>🔀 Currently querying both elasticsearch indexes....</b>"
+        return MessageBot._create_simple_message(content)
+    
+    @staticmethod
+    def comparison_id() -> Dict[str, str]:
+        content = "<b>🔀 Currently doing data comparison based on IDs.....</b>"
+        return MessageBot._create_simple_message(content)
+
+    @staticmethod
+    def return_ids() -> Dict[str, str]:
+        content = f"<b>📃 List ID results of comparison:</b>"
         return MessageBot._create_simple_message(content)
