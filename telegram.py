@@ -5,9 +5,6 @@ import logging
 import json
 
 from typing import *
-from telebot.async_telebot import AsyncTeleBot
-from telebot import apihelper
-from telebot.types import Message
 from utility import *
 from library import query, kafka_producer
 from logger import setup_logging
@@ -32,14 +29,20 @@ class BotReprocess:
         self._IPD = self.config[ "IPD" ]
         self._HOST = self.config[ "HOST" ]
         self._PORT = self.config[ "PORT" ]
+        self._FIELD = self.config[ "FIELD" ]
         self._LOG = self.config[ "LOGGING" ]
         self._ERROR = self.config[ "ERROR" ]
         self._SOURCE = self.config[ "SOURCE" ]
+        self._IMA_NDC = self.config[ "IMA_NDC" ]
+        self._AI_AUTH = self.config[ "AI_AUTH" ]
+        self._COMPARED = self.config[ "COMPARE" ]
         self._LOG_PATH = self.config[ "LOG_PATH" ]
         self._NUM_BYTES = self.config[ "NUM_BYTES" ]
         self._AI_ES_URL = self.config[ "AI_ES_URL" ]
         self._IPD_ES_URL = self.config[ "IPD_ES_URL" ]
         self._TIME_SLEEP = self.config[ "TIME_SLEEP" ]
+        self._IMA_NDC_AUTH = self.config[ "IMA_NDC_AUTH" ]
+        self._IMA_NDC_ES_URL = self.config[ "IMA_NDC_ES_URL" ]
         self._LOGGING_ES_URL = self.config[ "LOGGING_ES_URL" ]
         self._TELEGRAM_TOKEN = self.config[ "TELEGRAM_TOKEN" ]
         self._BOOTSTRAP_SERVER = self.config["BOOTSTRAP_SERVER"]
@@ -53,6 +56,7 @@ class BotReprocess:
         self.telebot = self.util.async_telebot( self._TELEGRAM_TOKEN )
         self.date_time = self.util.current_datetime_str( self.DATETIME_FORMAT )
 
+        self.http_auth = lambda auth: ( auth[ "USER" ], auth[ "PASSWORD" ] )
         self.storage = lambda key, value: self.util.storage( self.important, key, value )
         self.send = lambda topic: kafka_producer( bootstrap_servers=self._BOOTSTRAP_SERVER, topic=topic, time_sleep=self._TIME_SLEEP )
 
@@ -99,7 +103,6 @@ class BotReprocess:
             initial_message = message_bot.view_log( message, self._HOST, self._PORT, view_log )
             await self.telebot.send_message( chat_id, initial_message[ "message" ], initial_message[ "parse_mode" ] )
 
-
         @self.telebot.message_handler( content_types=["document"] )
         async def list_id_doc( message ):
             chat_id = message.chat.id
@@ -109,7 +112,7 @@ class BotReprocess:
             file_info = await self.telebot.get_file(document_file_id)
             downloaded_file = await self.telebot.download_file(file_info.file_path)
             
-            if ( mime_type == "text/plain" ):    
+            if ( mime_type == "text/plain" ):
                 list_id = self.util.readline_plain( downloaded_file )
             elif ( mime_type == "text/csv" ):
                 list_id = self.util.readline_csv( downloaded_file )
@@ -125,6 +128,71 @@ class BotReprocess:
             save_message = await self.telebot.send_message( chat_id, initial_message[ "message" ], initial_message[ "parse_mode" ], reply_markup=markup )
             self.storage( "replay_markup_id", save_message.message_id )
 
+        
+        @self.telebot.message_handler( commands=["idcomparison"] )
+        async def data_group_idcomparison(message):
+            chat_id = message.chat.id
+            markup = self.util.data_group_markup( self._COMPARED, 3 )
+            initial_message = message_bot.markup_id_comparison()
+            save_message = await self.telebot.send_message( chat_id, initial_message[ "message" ], initial_message[ "parse_mode" ], reply_markup=markup )
+            self.storage( "replay_markup_id", save_message.message_id )
+        
+
+        @self.telebot.callback_query_handler( func=lambda call: True if call.data in self._COMPARED else False )
+        async def callback_handler_data_group(call):
+            data = call.data
+            chat_id = call.message.chat.id
+            self.storage( "data_group", data )
+            self.logger.info( "Users select the %s group data to compare IDs." % data )
+
+            replay_markup_id = self.important[ "replay_markup_id" ]
+            markup = self.util.filter_markup()
+            await self.telebot.edit_message_reply_markup( chat_id, replay_markup_id, reply_markup=markup )
+
+        
+        @self.telebot.callback_query_handler( func=lambda call: True if "gt" and "lt" in call.data else False )
+        async def callback_handler_idcomparison(call):
+            data = call.data
+            chat_id = call.message.chat.id
+            gt_lt = json.loads(data)
+            data_group = self.important[ "data_group" ]
+
+            field_id = self._FIELD[ "ID" ]
+            field_time_source = self._FIELD[ "TIME_SOURCE" ]
+            field_time_dest = self._FIELD[ "TIME_DEST" ]
+            
+            es_url_dest = self._IMA_NDC_ES_URL
+            http_auth_dest = self.http_auth( self._IMA_NDC_AUTH )
+            
+            if data_group == "printed-news":
+                es_url = self._AI_ES_URL
+                http_auth = self.http_auth( self._AI_AUTH )
+                index_source = self.util.get_key_by_value( self._AI, data_group )
+                index_dest = self.util.get_key_by_value( self._IMA_NDC, data_group )
+            
+            elif data_group == "tv-new":
+                es_url = self._AI_ES_URL
+                http_auth = self.http_auth( self._AI_AUTH )
+                index_source = self.util.get_key_by_value( self._AI, data_group )
+                index_dest = self.util.get_key_by_value( self._IMA_NDC, data_group )
+            
+            elif data_group == "online-news":
+                es_url = self._IPD_ES_URL
+                index_source = self._IPD.get( data_group )
+                index_dest = self.util.get_key_by_value( self._IMA_NDC, data_group )
+
+            elastic = query( hosts=es_url ) if data_group == "online-news" else query( hosts=es_url, http_auth=http_auth )
+            ids = elastic.get_ids_doc( index_source, gt_lt, id=field_id, time=field_time_source )
+            
+            elastic = query( hosts=es_url_dest, http_auth=http_auth_dest )
+            ids_result = elastic.id_comparison_doc( index_dest, ids, id=field_id, time=field_time_dest )
+            
+            ids_result = "\n".join( ids_result )
+            ids_doc = self.util.byters( ids_result, "list-id-result-comparison.txt" )
+            
+            initial_message = message_bot.return_ids( call.message, ids_result )
+            await self.telebot.send_message( chat_id, initial_message[ "message" ], initial_message[ "parse_mode" ] )
+            await self.telebot.send_document( chat_id, ids_doc )
 
         @self.telebot.message_handler( func=lambda message: True if re.match( self.PATTERN_VALIDATION_ID, message.text ) else False )
         async def message_id_from_user( message ):
@@ -193,6 +261,7 @@ class BotReprocess:
             username = call.from_user.username
             data_src = self.important[ "data_source" ]
             
+            http_auth = None
             if ( data_src == "logging" ):
                 es_url = self._LOGGING_ES_URL
                 config_key = "LOGGING"
@@ -201,6 +270,9 @@ class BotReprocess:
                 config_key = "ERROR"
             elif ( data_src == "ai" ):
                 es_url = self._AI_ES_URL
+                http_auth = self.http_auth(
+                    auth=self._AI_AUTH
+                )
                 config_key = "AI"
             else:
                 es_url = self._IPD_ES_URL
@@ -225,7 +297,7 @@ class BotReprocess:
 
             try:
                 list_ids = self.important[ "list_id" ]
-                search = query( hosts=es_url )
+                search = query( hosts=es_url ) if not http_auth else query( hosts=es_url, http_auth=http_auth )
                 response, existing_ids, ids_not_found = search.search( list_ids, index_pattern )
 
                 self.storage( "query_result", response )

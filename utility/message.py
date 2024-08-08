@@ -55,22 +55,33 @@ class MessageBot:
         return MessageBot._create_message(message.from_user.username, fullname, content, "Markdown")
     
     @staticmethod
+    def return_ids(message, ids) -> Dict[str, str]:
+        fullname = MessageBot._format_fullname(message)
+        content = f"<b>List ID results of comparison:</b>"
+        return MessageBot._create_message(message.from_user.username, fullname, content)
+
+    @staticmethod
     def markup_message(content: str) -> Dict[str, str]:
         return {"message": content, "parse_mode": "HTML"}
 
     @staticmethod
     def markup_raw_source() -> Dict[str, str]:
-        content = "🌞 Specify a data raw source from <b>( <i>AI</i> OR <i>LOGGING</i> OR <i>IPD</i> OR <i>ERROR</i> )</b>"
+        content = "🌞 Specify a data raw source from \n ↳ <b>( <i>AI</i>, <i>LOGGING</i>, <i>IPD</i>, <i>ER,</i> )</b>"
         return MessageBot.markup_message(content)
     
     @staticmethod
     def markup_processing_path() -> Dict[str, str]:
-        content = "📝 Specify a processing path <b>( <i>Regular</i> OR <i>Reprocess</i> )</b>"
+        content = "📝 Specify a processing path <b>( <i>Regular</i>, <i>Reprocess</i> )</b>"
         return MessageBot.markup_message(content)
     
     @staticmethod
     def markup_index_pattern(kibana="AI") -> Dict[str, str]:
         content = f"🎞 Specify a index pattern for <b>( <i>{kibana}</i> )</b>"
+        return MessageBot.markup_message(content)
+    
+    @staticmethod
+    def markup_id_comparison() -> Dict[ str, str ]:
+        content = f"🕵️‍♂️ Choose what group of data the ID will be compared with \n ↳ <b>( <i>printed-news</i>, <i>tv-news</i>, <i>online-news</i> ) </b>.\n\n 🕐 Then Quickly Select the Date!"
         return MessageBot.markup_message(content)
     
     @staticmethod

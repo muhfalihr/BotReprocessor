@@ -13,7 +13,8 @@ def log_page():
     <!doctype html>
     <html>
     <head>
-        <title>ONP Log Viewer</title>
+        <title>BotReprocessLog</title>
+        <link rel="icon" href="static/favicon.png" type="image/png">
         <style>
             body {
                 background-color: black;

@@ -15,6 +15,14 @@ config:
   IPD_ES_URL: "http://10.12.3.200:5200/"
   LOGGING_ES_URL: "http://192.168.21.100:5200/"
   AI_ES_URL: "http://10.12.1.50:5200/"
+  IMA_NDC_ES_URL: "http://192.168.150.225:2407/"
+
+  AI_AUTH:
+    USER: "elastic"
+    PASSWORD: "Sh1n3A1mt2k24dx"
+  IMA_NDC_AUTH:
+    USER: "elastic"
+    PASSWORD: "SyUPp3r1M4GoPr0Ds2k24H"
 
    # Kafka
   BOOTSTRAP_SERVER:
@@ -41,6 +49,11 @@ config:
   AI:
     printed-news-raw-*: 'printed-news'
     tv-news-raw-2024*: 'tv-news'
+  
+  IMA_NDC:
+    ima-printed-news*: 'printed-news'
+    ima-tv-news*: 'tv-news'
+    ima-online-news-*: 'online-news'
   
   LOGGING:
     logging-result-facebook-comment-*: 'ipd-facebook-comment-flag'
@@ -69,3 +82,10 @@ config:
     error-twitter-post-*: 'ipd-twitter-post-flag'
     error-youtube-comment-*: 'ipd-youtube-comment-flag'
     error-youtube-post-*: 'ipd-youtube-post-flag'
+
+  # id comparison
+  COMPARE: 'printed-news,tv-new,online-news'
+  FIELD:
+    ID: 'id'
+    TIME_SOURCE: 'pubDate'
+    TIME_DEST: 'created_at'

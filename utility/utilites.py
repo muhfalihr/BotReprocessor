@@ -5,14 +5,18 @@ import hashlib
 import logging
 
 from typing import *
-from datetime import datetime
+from json import dumps
 from pandas import read_csv
-from telebot.async_telebot import AsyncTeleBot
-from telebot.types import InlineKeyboardMarkup
 from telebot.util import quick_markup
+from telebot.async_telebot import AsyncTeleBot
+from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
+from telegram_bot_calendar import DetailedTelegramCalendar
+from .filter import FilterDateTime as filter_date_time
+from datetime import datetime, timedelta
 
 class KangUtil:
     def __init__(self) -> None:
+        self.filter_date_time = filter_date_time()
         self.logger = logging.getLogger(self.__class__.__name__)
     
     def async_telebot(self, token: str) -> AsyncTeleBot:
@@ -29,6 +33,25 @@ class KangUtil:
         markup = quick_markup(
             setup_markup( value ), row_width
         )
+        return markup
+    
+    def filter_markup(self, row_width: int = 2) -> InlineKeyboardMarkup:
+        markup_dict = {}
+        markup_dict[ "Today" ] = { "callback_data": dumps(self.filter_date_time.get_today()) }
+        markup_dict[ "This Week" ] = { "callback_data": dumps(self.filter_date_time.get_this_week()) }
+        markup_dict[ "This Month" ] = { "callback_data": dumps(self.filter_date_time.get_this_month()) }
+        markup_dict[ "This Year" ] = { "callback_data": dumps(self.filter_date_time.get_this_year()) }
+        
+        markup = quick_markup( markup_dict, row_width )
+        return markup
+    
+    def data_group_markup(self, value:str, row_width: int = 2) -> InlineKeyboardMarkup:
+        markup_dict = {}
+        data_group_list = value.split( "," )
+        for data_group in data_group_list:
+            markup_dict[ data_group ] = { "callback_data": data_group }
+        
+        markup = quick_markup( markup_dict, row_width )
         return markup
 
     def format_fullname(self, message) -> str:
@@ -107,7 +130,18 @@ class KangUtil:
         doc = io.BytesIO(string.encode())
         doc.name = doc_name
         return doc
-
+    
+    def min_seven(self, date: str, format: str):
+        dt = datetime.strptime( date, format )
+        new_dt = datetime.strftime( dt - timedelta( hours=7 ), format )
+        return new_dt
+    
+    def get_key_by_value(self, dictionary, value):
+        for key, val in dictionary.items():
+            if val == value:
+                return key
+        return None
+        
     def current_datetime_str(self, format: str) -> str:
         return datetime.now().strftime(format)
 
