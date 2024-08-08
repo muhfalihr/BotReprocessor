@@ -67,14 +67,14 @@ class Query:
         field_id = field[ "id" ]
         field_time = field[ "time" ]
         filter = self._query_filter( field_time, gt_lt )
-        ids = [ hit[ "_source" ][ field_id ] for hit in scan( self.elastic, filter, index=index, scroll="2m", size=10 ) ]
+        ids = [ hit[ "_source" ][ field_id ] for hit in scan( self.elastic, filter, index=index, scroll="5m", size=10 ) ]
         return ids
     
     @retry(stop=stop_after_attempt(3), wait=wait_fixed(2))
     def _scan_queries(self, index: str, value, **field):
         field_id = field[ "id" ]
         query = self._query_terms( field_id, value )
-        ids = [ hit[ "_source" ][ field_id ] for hit in scan( self.elastic, query, index=index, scroll="2m", size=10 ) ]  
+        ids = [ hit[ "_source" ][ field_id ] for hit in scan( self.elastic, query, index=index, scroll="5m", size=10 ) ]  
         return ids
 
     @retry(stop=stop_after_attempt(3), wait=wait_fixed(2))

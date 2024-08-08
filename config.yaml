@@ -84,7 +84,7 @@ config:
     error-youtube-post-*: 'ipd-youtube-post-flag'
 
   # id comparison
-  COMPARE: 'printed-news,tv-new,online-news'
+  COMPARE: 'printed-news,tv-news,online-news'
   FIELD:
     ID: 'id'
     TIME_SOURCE: 'pubDate'

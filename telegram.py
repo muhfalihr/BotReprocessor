@@ -164,18 +164,12 @@ class BotReprocess:
             es_url_dest = self._IMA_NDC_ES_URL
             http_auth_dest = self.http_auth( self._IMA_NDC_AUTH )
             
-            if data_group == "printed-news":
+            if data_group in [ "printed-news", "tv-news" ]:
                 es_url = self._AI_ES_URL
                 http_auth = self.http_auth( self._AI_AUTH )
                 index_source = self.util.get_key_by_value( self._AI, data_group )
                 index_dest = self.util.get_key_by_value( self._IMA_NDC, data_group )
-            
-            elif data_group == "tv-new":
-                es_url = self._AI_ES_URL
-                http_auth = self.http_auth( self._AI_AUTH )
-                index_source = self.util.get_key_by_value( self._AI, data_group )
-                index_dest = self.util.get_key_by_value( self._IMA_NDC, data_group )
-            
+
             elif data_group == "online-news":
                 es_url = self._IPD_ES_URL
                 index_source = self._IPD.get( data_group )
