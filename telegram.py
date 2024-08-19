@@ -136,9 +136,10 @@ class BotReprocess:
             initial_message = message_bot.markup_id_comparison()
             save_message = await self.telebot.send_message( chat_id, initial_message[ "message" ], initial_message[ "parse_mode" ], reply_markup=markup )
             self.storage( "replay_markup_id", save_message.message_id )
+            self.storage( "idcomparison", True )
         
 
-        @self.telebot.callback_query_handler( func=lambda call: True if call.data in self._COMPARED else False )
+        @self.telebot.callback_query_handler( func=lambda call: True if call.data in self._COMPARED and self.important.get("idcomparison", False) else False )
         async def callback_handler_data_group(call):
             data = call.data
             chat_id = call.message.chat.id
@@ -305,25 +306,29 @@ class BotReprocess:
                 self.storage( "query_result", response )
                 self.logger.info( "Elasticsearch query successful for user %s" % ( username ) )
 
-                dumper = json.dumps( response, indent=4 ) if response else dict().__str__()
-                doc_query_result = self.util.byters( dumper, "queryresult-%s.json" % ( self.date_time ) )
+                if response:
+                    dumper = json.dumps( response, indent=4 ) if response else dict().__str__()
+                    doc_query_result = self.util.byters( dumper, "queryresult-%s.json" % ( self.date_time ) )
 
-                initial_message = message_bot.query_result( es_url, index_pattern )
-                await self.telebot.send_message( chat_id, initial_message[ "message" ], initial_message[ "parse_mode" ] )
-                await self.telebot.send_document( chat_id, doc_query_result )
+                    initial_message = message_bot.query_result( es_url, index_pattern )
+                    await self.telebot.send_message( chat_id, initial_message[ "message" ], initial_message[ "parse_mode" ] )
+                    await self.telebot.send_document( chat_id, doc_query_result )
                 
                 if ids_not_found:
                     idsnf = "\n".join( ids_not_found )
                     doc_ids_not_found = self.util.byters( idsnf, "list-ids-not-found.txt" )
                     await self.telebot.send_document( chat_id, doc_ids_not_found )
+                    initial_message = message_bot.no_result_query( es_url )
+                    await self.telebot.send_message( chat_id, initial_message[ "message" ], initial_message[ "parse_mode" ] )
+                    initial_message = message_bot.not_ready_sent( topic_name )
+                    await self.telebot.send_message( chat_id, initial_message[ "message" ], initial_message[ "parse_mode" ] )
 
                 if existing_ids:
                     eids = "\n".join( existing_ids )
                     doc_existing_ids = self.util.byters( eids, "list-existing-ids.txt" )
                     await self.telebot.send_document( chat_id, doc_existing_ids )
-
-                initial_message = message_bot.ready_sent( topic_name )
-                await self.telebot.send_message( chat_id, initial_message[ "message" ], initial_message[ "parse_mode" ] )
+                    initial_message = message_bot.ready_sent( topic_name )
+                    await self.telebot.send_message( chat_id, initial_message[ "message" ], initial_message[ "parse_mode" ] )
             
             except ElasticsearchErrorException as err:
                 self.logger.error( "%s" % ( err ) )
