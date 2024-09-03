@@ -4,7 +4,7 @@ config:
   TELEGRAM_TOKEN: "6991087594:AAHwt9o0a0Dpji8TA-1-jVV5B2_fWbVzoSg"
 
   # Log
-  LOG_PATH: '/tmp/onp'
+  LOG_PATH: '/tmp/botreprocess'
   NUM_BYTES: 3900
 
   # LogApp

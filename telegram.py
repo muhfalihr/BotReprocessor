@@ -1,21 +1,21 @@
-import io
 import re
+import json
 import asyncio
 import logging
-import json
 
 from typing import *
 from utility import *
-from library import query, kafka_producer
-from logger import setup_logging
-from datetime import datetime
 from time import time
+from datetime import datetime
+from logger import setup_logging
+from library import query, kafka_producer
 
 class BotReprocess:
     
     INDEX_PATTERNS = []
     DATETIME_FORMAT = "%Y%m%dT%H%M%S"
     PATTERN_VALIDATION_ID = r"([a-zA-Z0-9]|\d+_\d+)\n?"
+    PATTERN_GT_LT = r'\{"gt": "\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}", "lt": "\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}"\}'
 
     def __init__(self) -> None:
         """
@@ -103,19 +103,24 @@ class BotReprocess:
             initial_message = message_bot.view_log( message, self._HOST, self._PORT, view_log )
             await self.telebot.send_message( chat_id, initial_message[ "message" ], initial_message[ "parse_mode" ] )
 
+
         @self.telebot.message_handler( content_types=["document"] )
         async def list_id_doc( message ):
             chat_id = message.chat.id
             mime_type = message.document.mime_type
-            document_file_id = message.document.file_id
-            
+            document_file_id = message.document.file_id 
+
             file_info = await self.telebot.get_file(document_file_id)
             downloaded_file = await self.telebot.download_file(file_info.file_path)
-            
             if ( mime_type == "text/plain" ):
                 list_id = self.util.readline_plain( downloaded_file )
             elif ( mime_type == "text/csv" ):
                 list_id = self.util.readline_csv( downloaded_file )
+            elif ( mime_type == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" ):
+                list_id = self.util.readline_xlsx( downloaded_file ) 
+            else:
+                initial_message = message_bot.not_support_mime_type( message, mime_type )
+                await self.telebot.send_message( chat_id, initial_message[ "message" ], initial_message[ "parse_mode" ] ); return
             self.storage( "list_id", list_id )
             
             ids = "".join( list_id )
@@ -151,7 +156,7 @@ class BotReprocess:
             await self.telebot.edit_message_reply_markup( chat_id, replay_markup_id, reply_markup=markup )
 
         
-        @self.telebot.callback_query_handler( func=lambda call: True if "gt" and "lt" in call.data else False )
+        @self.telebot.callback_query_handler( func=lambda call: True if re.match(self.PATTERN_GT_LT, call.data) else False )
         async def callback_handler_idcomparison(call):
             data = call.data
             chat_id = call.message.chat.id
@@ -224,9 +229,9 @@ class BotReprocess:
             self.storage( "replay_markup_id", save_message.message_id )
 
 
-        @self.telebot.callback_query_handler( func=lambda call: call.data in [ src for src in self.config[ "SOURCE" ].keys() ] )
+        @self.telebot.callback_query_handler( func=lambda call: call.data in [ src for src in self._SOURCE.keys() ] )
         async def data_source( call ):
-            source = self.config[ "SOURCE" ][ call.data ]
+            source = self._SOURCE[ call.data ]
             chat_id = call.message.chat.id
             self.storage( "data_source", source )
 
@@ -257,7 +262,7 @@ class BotReprocess:
                 )
 
 
-        @self.telebot.callback_query_handler( func=lambda call: call.data in [src for src in self._EXTEND ])
+        @self.telebot.callback_query_handler( func=lambda call: True if call.data in self._EXTEND else False)
         async def process( call ):
             call_data = call.data
             chat_id = call.message.chat.id
@@ -298,45 +303,37 @@ class BotReprocess:
             initial_message = message_bot.topic_name( topic_name )
             await self.telebot.send_message( chat_id, initial_message[ "message" ], initial_message[ "parse_mode" ] )
 
-            try:
-                list_ids = self.important[ "list_id" ]
-                search = query( hosts=es_url ) if not http_auth else query( hosts=es_url, http_auth=http_auth )
-                response, existing_ids, ids_not_found = search.search( list_ids, index_pattern )
+            list_ids = self.important[ "list_id" ]
+            search = query( hosts=es_url ) if not http_auth else query( hosts=es_url, http_auth=http_auth )
+            response, existing_ids, ids_not_found = search.search( list_ids, index_pattern )
 
-                self.storage( "query_result", response )
-                self.logger.info( "Elasticsearch query successful for user %s" % ( username ) )
+            self.storage( "query_result", response )
+            self.logger.info( "Elasticsearch query successful for user %s" % ( username ) )
 
-                if response:
-                    dumper = json.dumps( response, indent=4 ) if response else dict().__str__()
-                    doc_query_result = self.util.byters( dumper, "queryresult-%s.json" % ( self.date_time ) )
+            if response:
+                dumper = json.dumps( response, indent=4 ) if response else dict().__str__()
+                doc_query_result = self.util.byters( dumper, "queryresult-%s.json" % ( self.date_time ) )
 
-                    initial_message = message_bot.query_result( es_url, index_pattern )
-                    await self.telebot.send_message( chat_id, initial_message[ "message" ], initial_message[ "parse_mode" ] )
-                    await self.telebot.send_document( chat_id, doc_query_result )
-                
-                if ids_not_found:
-                    idsnf = "\n".join( ids_not_found )
-                    doc_ids_not_found = self.util.byters( idsnf, "list-ids-not-found.txt" )
-                    await self.telebot.send_document( chat_id, doc_ids_not_found )
-                    initial_message = message_bot.no_result_query( es_url )
-                    await self.telebot.send_message( chat_id, initial_message[ "message" ], initial_message[ "parse_mode" ] )
-                    initial_message = message_bot.not_ready_sent( topic_name )
-                    await self.telebot.send_message( chat_id, initial_message[ "message" ], initial_message[ "parse_mode" ] )
-
-                if existing_ids:
-                    eids = "\n".join( existing_ids )
-                    doc_existing_ids = self.util.byters( eids, "list-existing-ids.txt" )
-                    await self.telebot.send_document( chat_id, doc_existing_ids )
-                    initial_message = message_bot.ready_sent( topic_name )
-                    await self.telebot.send_message( chat_id, initial_message[ "message" ], initial_message[ "parse_mode" ] )
+                initial_message = message_bot.query_result( es_url, index_pattern )
+                await self.telebot.send_message( chat_id, initial_message[ "message" ], initial_message[ "parse_mode" ] )
+                await self.telebot.send_document( chat_id, doc_query_result )
             
-            except ElasticsearchErrorException as err:
-                self.logger.error( "%s" % ( err ) )
-
+            if ids_not_found and not response:
                 initial_message = message_bot.no_result_query( es_url )
                 await self.telebot.send_message( chat_id, initial_message[ "message" ], initial_message[ "parse_mode" ] )
-
                 initial_message = message_bot.not_ready_sent( topic_name )
+                await self.telebot.send_message( chat_id, initial_message[ "message" ], initial_message[ "parse_mode" ] )
+            
+            elif ids_not_found:
+                idsnf = "\n".join( ids_not_found )
+                doc_ids_not_found = self.util.byters( idsnf, "list-ids-not-found.txt" )
+                await self.telebot.send_document( chat_id, doc_ids_not_found )
+        
+            if existing_ids:    
+                eids = "\n".join( existing_ids )
+                doc_existing_ids = self.util.byters( eids, "list-existing-ids.txt" )
+                await self.telebot.send_document( chat_id, doc_existing_ids )
+                initial_message = message_bot.ready_sent( topic_name )
                 await self.telebot.send_message( chat_id, initial_message[ "message" ], initial_message[ "parse_mode" ] )
 
     def produce_message(self):

@@ -7,6 +7,7 @@ import logging
 from typing import *
 from json import dumps
 from pandas import read_csv
+from openpyxl import load_workbook
 from telebot.util import quick_markup
 from telebot.async_telebot import AsyncTeleBot
 from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
@@ -41,7 +42,7 @@ class KangUtil:
         markup_dict[ "This Week" ] = { "callback_data": dumps(self.filter_date_time.get_this_week()) }
         markup_dict[ "This Month" ] = { "callback_data": dumps(self.filter_date_time.get_this_month()) }
         markup_dict[ "This Year" ] = { "callback_data": dumps(self.filter_date_time.get_this_year()) }
-        
+
         markup = quick_markup( markup_dict, row_width )
         return markup
     
@@ -101,6 +102,23 @@ class KangUtil:
             for line in content:
                 list_content.append( line )
         return list_content
+
+    def readline_xlsx(self, file: bytes):
+        with io.BytesIO( file ) as bfile:
+            workbook = load_workbook( bfile )
+            sheet = workbook.active
+            list_content = []
+            coloums = ["id", "_id", "id_hash", "Id"]
+            header = next(sheet.iter_rows(values_only=True))
+            column_indices = {
+                header.index(col_name): col_name
+                for col_name in coloums
+                if col_name in header
+            }
+            for row in sheet.iter_rows(min_row=2, values_only=True):
+                filtered = [ row[index] for index in column_indices.keys() ][0]
+                list_content.append(filtered)
+            return list_content
     
     def value_in_list(self, *lists, value):
         for lst in lists:

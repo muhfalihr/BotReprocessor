@@ -18,7 +18,7 @@ class Query:
     
     def _query_filter(self, field: str, gt_lt: Dict[str, str]):
         return { "query": { "range": { field: gt_lt } } }
-
+    
     def search(self, ids: List[str], index_pattern: str):
         sources = []
         existing_ids = []
@@ -36,14 +36,14 @@ class Query:
 
                 elif re.match(pattern=r'^logging-result.*|error-(?!.*news).*', string=index_pattern):
                     source = hit[ "_source" ][ "raw" ]
-                    id_doc = hit[ "_source" ][ field_id ]
+                    id_doc = hit[ field_id ]
                     if "error_status" in source: source.pop("error_status")
                     sources.append(source)
                     existing_ids.append(id_doc)
                 
                 elif re.match(pattern=r'error-.*news.*', string=index_pattern):
                     source = hit[ "_source" ][ "data" ]
-                    id_doc = hit[ "_source" ][ field_id ]
+                    id_doc = hit[ field_id ]
                     if "error_status" in source: source.pop("error_status")
                     sources.append(source)
                     existing_ids.append(id_doc)
@@ -53,13 +53,10 @@ class Query:
                     id_doc = hit[ "_source" ][ field_id ]
                     sources.append(source)
                     existing_ids.append(id_doc)
-            
         
         except ( elasticsearch_exception, Exception ) as err:
             self.logger.error(f"Elasticsearch error : {err}")
-        
         ids_not_found = [ id for id in ids if id not in existing_ids ]
-
         return sources, existing_ids, ids_not_found
     
     @retry(stop=stop_after_attempt(3), wait=wait_fixed(2))

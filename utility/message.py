@@ -49,6 +49,12 @@ class MessageBot:
         return MessageBot._create_message(message.from_user.username, fullname, content)
     
     @staticmethod
+    def not_support_mime_type(message, mime_type) -> Dict[str, str]:
+        fullname = MessageBot._format_fullname(message)
+        content = f"🔴 <b>MIME type '{mime_type}' is not supported.</b>"
+        return MessageBot._create_message(message.from_user.username, fullname, content)
+    
+    @staticmethod
     def view_log(message, host, port, log) -> Dict[str, str]:
         fullname = MessageBot._format_fullname(message)
         content = f"See [Full Log](http://{host}:{port}/log) details.\n\n```\n{log}```"
